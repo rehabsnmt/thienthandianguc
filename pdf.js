@@ -1,5 +1,7 @@
+// --- CẤU HÌNH PDF.JS ---
 pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js';
 
+// --- BIẾN TOÀN CỤC ---
 const DOM = {
     uploadScreen: document.getElementById('uploadScreen'),
     workspaceScreen: document.getElementById('workspaceScreen'),
@@ -11,7 +13,6 @@ const DOM = {
     singleTools: document.getElementById('singleFileTools'),
     multiTools: document.getElementById('multiFileTools'),
     
-    // Zoom Modal DOMs
     zoomModal: document.getElementById('zoomModal'),
     zoomCanvas: document.getElementById('zoomCanvas'),
     zoomPageText: document.getElementById('zoomPageText'),
@@ -19,9 +20,9 @@ const DOM = {
 };
 
 let uploadedFiles = [];
-let singleFileBuffer = null;
+let currentSingleFile = null; // FIX: Lưu File Object thay vì ArrayBuffer để tránh bị detached
 let pagesData = []; 
-let currentPdfDoc = null; // Biến lưu trữ PDF để dùng cho tính năng Zoom
+let currentPdfDoc = null; 
 
 // --- 1. XỬ LÝ UPLOAD FILE ---
 DOM.fileInput.addEventListener('change', (e) => handleFiles(e.target.files));
@@ -40,12 +41,14 @@ async function handleFiles(files) {
     DOM.fileList.innerHTML = '';
 
     if (uploadedFiles.length === 1) {
+        currentSingleFile = uploadedFiles[0]; // Lưu lại File gốc
         DOM.singleTools.style.display = 'flex';
         DOM.multiTools.style.display = 'none';
         DOM.fileList.style.display = 'none';
         DOM.previewGrid.style.display = 'grid';
-        await renderPDFPreview(uploadedFiles[0]);
+        await renderPDFPreview(currentSingleFile);
     } else {
+        currentSingleFile = null;
         DOM.singleTools.style.display = 'none';
         DOM.multiTools.style.display = 'flex';
         DOM.previewGrid.style.display = 'none';
@@ -58,9 +61,10 @@ async function handleFiles(files) {
 async function renderPDFPreview(file) {
     DOM.loadingMsg.style.display = 'block';
     try {
-        singleFileBuffer = await file.arrayBuffer();
-        const loadingTask = pdfjsLib.getDocument(new Uint8Array(singleFileBuffer));
-        currentPdfDoc = await loadingTask.promise; // Lưu lại để dùng khi phóng to
+        // Tạo một buffer tạm thời chỉ để render xem trước
+        const tempBuffer = await file.arrayBuffer();
+        const loadingTask = pdfjsLib.getDocument(new Uint8Array(tempBuffer));
+        currentPdfDoc = await loadingTask.promise; 
         
         pagesData = []; 
 
@@ -74,7 +78,6 @@ async function renderPDFPreview(file) {
             card.className = 'page-card';
             card.dataset.index = i - 1; 
             
-            // Cấu trúc Card có thêm nút Kính lúp (Zoom)
             card.innerHTML = `
                 <div class="selected-badge">✓</div>
                 <canvas></canvas>
@@ -89,17 +92,15 @@ async function renderPDFPreview(file) {
 
             await page.render({ canvasContext: ctx, viewport: viewport }).promise;
 
-            // Sự kiện chọn trang
             card.addEventListener('click', () => {
                 const idx = parseInt(card.dataset.index);
                 pagesData[idx].selected = !pagesData[idx].selected;
                 card.classList.toggle('selected');
             });
 
-            // Sự kiện click nút Kính lúp (Ngăn chặn sự kiện click lan ra ngoài Card)
             const zoomBtn = card.querySelector('.zoom-btn');
             zoomBtn.addEventListener('click', (e) => {
-                e.stopPropagation(); // Không cho kích hoạt sự kiện chọn trang
+                e.stopPropagation(); 
                 openZoomModal(i);
             });
 
@@ -129,7 +130,6 @@ async function openZoomModal(pageNum) {
 
     try {
         const page = await currentPdfDoc.getPage(pageNum);
-        // Scale 2.0 để render ảnh chất lượng cao khi phóng to
         const viewport = page.getViewport({ scale: 2.0 }); 
         
         const ctx = DOM.zoomCanvas.getContext('2d');
@@ -143,13 +143,12 @@ async function openZoomModal(pageNum) {
     }
 }
 
-// Đóng Modal khi click dấu X hoặc click ra ngoài viền
 DOM.closeModal.addEventListener('click', () => DOM.zoomModal.classList.remove('active'));
 DOM.zoomModal.addEventListener('click', (e) => {
     if (e.target === DOM.zoomModal) DOM.zoomModal.classList.remove('active');
 });
 
-// --- 4. CÁC TÍNH NĂNG TRÊN THANH CÔNG CỤ ---
+// --- 4. CÁC TÍNH NĂNG TRÊN THANH CÔNG CỤ (PDF-LIB & BACKEND) ---
 const { PDFDocument, degrees } = PDFLib;
 
 function downloadBlob(bytes, filename) {
@@ -192,18 +191,16 @@ document.getElementById('btnRotate').addEventListener('click', () => {
     });
 });
 
-// Nút Đặt mật khẩu (Báo hiệu giới hạn hệ thống)
-document.getElementById('btnPassword').addEventListener('click', () => {
-    alert("⚠️ LƯU Ý KỸ THUẬT:\n\nTrang web này hoạt động 100% trên trình duyệt của bạn (không gửi file lên Server để bảo mật dữ liệu tuyệt đối). \n\nTuy nhiên, công nghệ JavaScript Client-side hiện tại chưa hỗ trợ mã hóa (Encrypt) để tạo mật khẩu cho PDF.\n\nTính năng này sẽ được cập nhật trong tương lai khi công nghệ WebAssembly được tích hợp!");
-});
-
+// Lõi xử lý Tách & Xóa (FIX DETACHED ARRAY BUFFER)
 async function processSinglePDF(mode) {
     const btn = event.target;
     const oldText = btn.innerText;
     btn.innerText = "Đang xử lý...";
     
     try {
-        const sourcePdf = await PDFDocument.load(singleFileBuffer);
+        // FIX: Trích xuất một ArrayBuffer hoàn toàn mới từ File gốc
+        const freshBuffer = await currentSingleFile.arrayBuffer();
+        const sourcePdf = await PDFDocument.load(freshBuffer);
         const newPdf = await PDFDocument.create();
         
         const targetIndexes = pagesData
@@ -238,6 +235,53 @@ async function processSinglePDF(mode) {
 document.getElementById('btnExtract').addEventListener('click', () => processSinglePDF('extract'));
 document.getElementById('btnDelete').addEventListener('click', () => processSinglePDF('delete'));
 
+// API Khóa mật khẩu qua Backend (FIX LỖI BUFFER)
+document.getElementById('btnPassword').addEventListener('click', async () => {
+    const password = prompt("Vui lòng nhập mật khẩu bạn muốn đặt cho PDF này:");
+    if (!password) return; 
+
+    const btn = document.getElementById('btnPassword');
+    const oldText = btn.innerText;
+    btn.innerText = "⏳ Đang khóa...";
+    btn.disabled = true;
+
+    try {
+        const formData = new FormData();
+        // FIX: Đẩy thẳng File gốc vào form, không cần chuyển đổi
+        formData.append('pdfFile', currentSingleFile, currentSingleFile.name);
+        formData.append('password', password);
+
+        const backendUrl = 'http://localhost:3000/api/encrypt'; 
+        
+        const response = await fetch(backendUrl, {
+            method: 'POST',
+            body: formData
+        });
+
+        if (!response.ok) throw new Error(`Lỗi máy chủ: Phản hồi ${response.status}`);
+
+        const encryptedBlob = await response.blob();
+        const url = URL.createObjectURL(encryptedBlob);
+
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `ThienThanDiaNguc_Secured_${Date.now()}.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+
+    } catch (error) {
+        console.error(error);
+        alert("Kết nối tới Backend thất bại! Lỗi: " + error.message);
+    } finally {
+        btn.innerText = oldText;
+        btn.disabled = false;
+    }
+});
+
+// Gộp nhiều file
 document.getElementById('btnMerge').addEventListener('click', async (e) => {
     const btn = e.target;
     btn.innerText = "Đang gộp...";
