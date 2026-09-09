@@ -53,8 +53,16 @@ tabs.forEach(tab => {
 
 // --- XỬ LÝ CHỌN FILE ---
 fileInput.addEventListener('change', (e) => handleFiles(e.target.files));
-dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('dragover'); });
-dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'); );
+
+dropZone.addEventListener('dragover', (e) => { 
+    e.preventDefault(); 
+    dropZone.classList.add('dragover'); 
+});
+
+dropZone.addEventListener('dragleave', () => {
+    dropZone.classList.remove('dragover'); 
+}); // ĐÃ SỬA LỖI CÚ PHÁP Ở ĐÂY
+
 dropZone.addEventListener('drop', (e) => {
     e.preventDefault();
     dropZone.classList.remove('dragover');
@@ -94,9 +102,9 @@ window.removeFile = function(index) {
     renderFileList();
 }
 
-// --- HÀM HỖ TRỢ: PHÂN TÍCH CHUỖI SỐ TRANG (VD: "1, 3, 5-7") ---
+// --- HÀM HỖ TRỢ: PHÂN TÍCH CHUỖI SỐ TRANG ---
 function parsePageNumbers(inputStr, totalPages) {
-    let pages = new Set(); // Dùng Set để loại bỏ trùng lặp
+    let pages = new Set();
     let parts = inputStr.split(',');
     
     for (let part of parts) {
@@ -104,14 +112,13 @@ function parsePageNumbers(inputStr, totalPages) {
         if (part.includes('-')) {
             let [start, end] = part.split('-').map(Number);
             if (start > 0 && end <= totalPages && start <= end) {
-                for (let i = start; i <= end; i++) pages.add(i - 1); // pdf-lib đếm từ 0
+                for (let i = start; i <= end; i++) pages.add(i - 1); 
             }
         } else {
             let num = Number(part);
             if (num > 0 && num <= totalPages) pages.add(num - 1);
         }
     }
-    // Trả về mảng đã sắp xếp tăng dần
     return Array.from(pages).sort((a, b) => a - b);
 }
 
@@ -124,7 +131,7 @@ actionBtn.addEventListener('click', async () => {
 
         const { PDFDocument, degrees } = PDFLib;
         let finalPdfBytes;
-        let outputName = `HellAngel_${currentMode}_${new Date().getTime()}.pdf`;
+        let outputName = `ThienThanDiaNguc_${currentMode}_${new Date().getTime()}.pdf`;
 
         // CHẾ ĐỘ 1: GỘP FILE (MERGE)
         if (currentMode === 'merge') {
@@ -159,7 +166,6 @@ actionBtn.addEventListener('click', async () => {
                 const targetPages = parsePageNumbers(pageRangeInput.value, totalPages);
                 if (targetPages.length === 0) throw new Error("Số trang không hợp lệ!");
                 
-                // Cực kỳ quan trọng: Xóa ngược từ dưới lên trên để không làm sai lệch Index
                 targetPages.sort((a, b) => b - a).forEach(pageIndex => {
                     sourcePdf.removePage(pageIndex);
                 });
