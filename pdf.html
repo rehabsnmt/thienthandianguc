@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Xử Lý PDF - Thiên Thần Địa Ngục</title>
+    <script src="https://unpkg.com/pdf-lib/dist/pdf-lib.min.js"></script>
+    <style>
+        :root {
+            --bg-color: #121212;
+            --card-bg: #1e1e1e;
+            --text-main: #ffffff;
+            --text-muted: #a0a0a0;
+            --accent-color: #ff4757;
+            --accent-hover: #ff6b81;
+            --tab-bg: #2d2d2d;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            margin: 0;
+            padding: 2rem;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .header { width: 100%; max-width: 800px; display: flex; align-items: center; margin-bottom: 2rem; }
+        .back-btn { color: var(--accent-color); text-decoration: none; font-weight: bold; font-size: 1.1rem; margin-right: auto; }
+        .back-btn:hover { color: var(--accent-hover); }
+        h1 { font-size: 2rem; margin: 0; text-align: center; flex-grow: 1; margin-right: 80px; }
+
+        .tool-container { background-color: var(--card-bg); width: 100%; max-width: 800px; padding: 2rem; border-radius: 12px; box-sizing: border-box; border-top: 4px solid var(--accent-color); }
+
+        /* Tabs Chọn Chế Độ */
+        .tabs { display: flex; gap: 10px; margin-bottom: 1.5rem; flex-wrap: wrap; }
+        .tab { background-color: var(--tab-bg); color: var(--text-main); border: none; padding: 0.8rem 1.5rem; border-radius: 8px; cursor: pointer; font-weight: bold; transition: all 0.2s; flex: 1; min-width: 120px; text-align: center; }
+        .tab:hover { background-color: #3d3d3d; }
+        .tab.active { background-color: var(--accent-color); color: white; }
+
+        .upload-area { border: 2px dashed #444; border-radius: 8px; padding: 2rem; text-align: center; cursor: pointer; transition: all 0.3s ease; margin-bottom: 1.5rem; display: block;}
+        .upload-area:hover, .upload-area.dragover { border-color: var(--accent-color); background-color: rgba(255, 71, 87, 0.05); }
+        .upload-area input[type="file"] { display: none; }
+        .upload-icon { font-size: 2.5rem; margin-bottom: 0.5rem; display: block; }
+
+        .file-list { list-style: none; padding: 0; margin: 0 0 1.5rem 0; }
+        .file-item { background-color: #252525; padding: 10px 15px; border-radius: 6px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; border-left: 3px solid #555; }
+        .remove-btn { color: var(--accent-color); cursor: pointer; font-weight: bold; background: none; border: none; font-size: 1.2rem; }
+
+        /* Tùy chọn mở rộng (Số trang, Góc xoay) */
+        .options-panel { background-color: #252525; padding: 1.5rem; border-radius: 8px; margin-bottom: 1.5rem; display: none; }
+        .options-panel.active { display: block; }
+        .options-panel label { display: block; margin-bottom: 0.5rem; font-weight: bold; }
+        .options-panel input, .options-panel select { width: 100%; padding: 0.8rem; border-radius: 6px; border: 1px solid #444; background-color: #1a1a1a; color: white; box-sizing: border-box; font-size: 1rem; margin-bottom: 0.5rem;}
+        .options-panel input:focus { outline: none; border-color: var(--accent-color); }
+        .help-text { font-size: 0.85rem; color: var(--text-muted); }
+
+        .action-btn { width: 100%; background-color: var(--accent-color); color: white; border: none; padding: 1rem; font-size: 1.2rem; font-weight: bold; border-radius: 8px; cursor: pointer; transition: background-color 0.3s; }
+        .action-btn:hover { background-color: var(--accent-hover); }
+        .action-btn:disabled { background-color: #555; cursor: not-allowed; }
+    </style>
+</head>
+<body>
+
+    <div class="header">
+        <a href="index.html" class="back-btn">⬅ Trang chủ</a>
+        <h1>Công Cụ PDF</h1>
+    </div>
+
+    <div class="tool-container">
+        <!-- Chuyển đổi tính năng -->
+        <div class="tabs">
+            <button class="tab active" data-mode="merge">Gộp PDF</button>
+            <button class="tab" data-mode="extract">Tách Trang</button>
+            <button class="tab" data-mode="delete">Xóa Trang</button>
+            <button class="tab" data-mode="rotate">Xoay Trang</button>
+        </div>
+
+        <label class="upload-area" id="dropZone">
+            <span class="upload-icon">📄</span>
+            <span id="uploadText" style="font-size: 1.1rem; display: block; margin-bottom: 5px;">Chọn nhiều file để gộp</span>
+            <input type="file" id="fileInput" accept="application/pdf" multiple>
+        </label>
+
+        <ul class="file-list" id="fileList"></ul>
+
+        <!-- Bảng tùy chọn cho Tách/Xóa/Xoay -->
+        <div class="options-panel" id="optionsPanel">
+            <div id="pageInputGroup">
+                <label for="pageRange">Nhập số trang (VD: 1, 3, 5-10):</label>
+                <input type="text" id="pageRange" placeholder="1, 3, 5-7...">
+                <div class="help-text" id="pageHelpText"></div>
+            </div>
+            <div id="rotateInputGroup" style="display: none;">
+                <label for="rotateDegree">Góc xoay:</label>
+                <select id="rotateDegree">
+                    <option value="90">Xoay Phải 90°</option>
+                    <option value="-90">Xoay Trái 90°</option>
+                    <option value="180">Xoay 180°</option>
+                </select>
+                <div class="help-text">Áp dụng xoay cho toàn bộ trang trong file.</div>
+            </div>
+        </div>
+
+        <button class="action-btn" id="actionBtn" disabled>Thực Thi</button>
+    </div>
+
+    <script src="pdf.js"></script>
+</body>
+</html>
