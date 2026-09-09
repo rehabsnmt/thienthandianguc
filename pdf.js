@@ -44,7 +44,7 @@ let currentMode = 'none';
 let currentSingleFile = null;
 let pagesData = [];
 let documentPages = [];
-let currentZoomIndex = -1; // Lưu vị trí trang đang xem toàn màn hình
+let currentZoomIndex = -1; 
 
 const { PDFDocument, degrees } = PDFLib;
 
@@ -74,13 +74,13 @@ async function handleFiles(files) {
     DOM.previewGrid.innerHTML = '';
     DOM.fileList.innerHTML = '';
     
-    DOM.sharedTools.style.display = 'flex'; // Bật thanh công cụ chung
+    DOM.sharedTools.style.display = 'flex'; 
 
     if (currentMode === 'single') {
         DOM.singleTools.style.display = 'flex';
         DOM.multiTools.style.display = 'none';
         DOM.fileList.style.display = 'none';
-        DOM.previewGrid.style.display = 'grid';
+        DOM.previewGrid.style.display = 'block'; // Đổi thành block để bọc Grid + Header
         await loadSinglePDF(currentSingleFile);
     } else {
         DOM.singleTools.style.display = 'none';
@@ -102,6 +102,7 @@ async function loadSinglePDF(file) {
         pdfDocuments = [pdfJsDoc];
 
         for (let i = 0; i < pdfJsDoc.numPages; i++) {
+            // sourcePage lưu vị trí gốc của trang để phục vụ cho tính năng sắp xếp
             pagesData.push({ sourcePage: i, selected: false, rotation: 0 });
         }
         await renderSingleSource();
@@ -114,30 +115,44 @@ async function loadSinglePDF(file) {
 
 async function renderSingleSource() {
     DOM.previewGrid.innerHTML = '';
-    for (let i = 0; i < pagesData.length; i++) await createSinglePageCard(i);
+    
+    const header = document.createElement('div');
+    header.className = 'multi-preview-header';
+    header.innerHTML = `
+        <div><strong>Tất cả các trang</strong> <span style="color:#94a3b8; font-size:14px; margin-left:10px;">${pagesData.length} trang</span></div>
+        <div style="color:#94a3b8; font-size:13px;">Kéo thả để sắp xếp vị trí</div>
+    `;
+    DOM.previewGrid.appendChild(header);
+
+    const grid = document.createElement('div');
+    grid.id = 'singlePageGrid';
+    grid.style.cssText = 'display: grid; grid-template-columns: repeat(auto-fill, minmax(145px, 1fr)); gap: 18px; padding: 10px 0;';
+    DOM.previewGrid.appendChild(grid);
+
+    for (let i = 0; i < pagesData.length; i++) await createSinglePageCard(i, grid);
 }
 
-async function createSinglePageCard(pageIndex) {
+async function createSinglePageCard(pageIndex, grid) {
     const data = pagesData[pageIndex];
-    const page = await pdfDocuments[0].getPage(pageIndex + 1);
+    const page = await pdfDocuments[0].getPage(data.sourcePage + 1); // Render trang đúng với vị trí gốc
     const viewport = page.getViewport({ scale: 0.5 });
     
     const card = document.createElement('div');
     card.className = 'page-card';
+    card.draggable = true;
     card.dataset.index = pageIndex;
     
     card.innerHTML = `
         <div class="selected-badge">✓</div>
         <canvas></canvas>
-        <div class="page-number">Trang ${pageIndex + 1}</div>
+        <div class="page-number">Trang ${data.sourcePage + 1}</div>
         <button class="zoom-btn" title="Xem toàn trang">🔍</button>
     `;
 
     const canvas = card.querySelector('canvas');
-    const ctx = canvas.getContext('2d');
     canvas.width = viewport.width;
     canvas.height = viewport.height;
-    await page.render({ canvasContext: ctx, viewport: viewport }).promise;
+    await page.render({ canvasContext: canvas.getContext('2d'), viewport: viewport }).promise;
 
     applyCardRotation(card, data.rotation);
 
@@ -148,10 +163,32 @@ async function createSinglePageCard(pageIndex) {
 
     card.querySelector('.zoom-btn').addEventListener('click', e => {
         e.stopPropagation();
-        openZoomModal(pageIndex); // Truyền Index thay vì object
+        openZoomModal(pageIndex); 
     });
 
-    DOM.previewGrid.appendChild(card);
+    // Tính năng Kéo & Thả cho Single Mode
+    card.addEventListener('dragstart', e => {
+        card.classList.add('dragging');
+        e.dataTransfer.setData('text/plain', pageIndex);
+    });
+    card.addEventListener('dragend', () => {
+        card.classList.remove('dragging');
+        document.querySelectorAll('.page-card').forEach(el => el.classList.remove('drag-over'));
+    });
+    card.addEventListener('dragover', e => { e.preventDefault(); card.classList.add('drag-over'); });
+    card.addEventListener('dragleave', () => card.classList.remove('drag-over'));
+    card.addEventListener('drop', async e => {
+        e.preventDefault();
+        const fromIndex = parseInt(e.dataTransfer.getData('text/plain'));
+        const targetIndex = parseInt(card.dataset.index);
+        if (fromIndex !== targetIndex) {
+            const movedPage = pagesData.splice(fromIndex, 1)[0];
+            pagesData.splice(targetIndex, 0, movedPage);
+            await renderSingleSource();
+        }
+    });
+
+    grid.appendChild(card);
 }
 
 // ============================================================
@@ -227,6 +264,8 @@ async function createMultiPageCard(documentIndex, grid) {
     canvas.height = viewport.height;
     await page.render({ canvasContext: canvas.getContext('2d'), viewport: viewport }).promise;
 
+    applyCardRotation(card, item.rotation);
+
     card.addEventListener('click', () => {
         item.selected = !item.selected;
         card.classList.toggle('selected', item.selected);
@@ -237,7 +276,7 @@ async function createMultiPageCard(documentIndex, grid) {
         openZoomModal(documentIndex);
     });
 
-    // Cấu hình Kéo Thả (Drag & Drop)
+    // Kéo Thả Multi Mode
     card.addEventListener('dragstart', e => {
         card.classList.add('dragging');
         e.dataTransfer.setData('text/plain', documentIndex);
@@ -268,11 +307,11 @@ function applyCardRotation(card, rotation) {
 }
 
 // ============================================================
-// LOGIC CHỌN TRANG (CHUNG CHO CẢ 2 CHẾ ĐỘ)
+// LOGIC CHỌN TRANG (CHUNG)
 // ============================================================
 function updateSelectionUI() {
     const isSingle = currentMode === 'single';
-    const selector = isSingle ? '#previewGrid .page-card' : '#multiPageGrid .multi-page-card';
+    const selector = isSingle ? '#singlePageGrid .page-card' : '#multiPageGrid .multi-page-card';
     const dataArr = isSingle ? pagesData : documentPages;
     
     document.querySelectorAll(selector).forEach((card, idx) => {
@@ -292,14 +331,10 @@ DOM.btnInvertSelect.addEventListener('click', () => {
     updateSelectionUI();
 });
 
-// ============================================================
-// CHỨC NĂNG XÓA TRANG (HOẠT ĐỘNG TRÊN CẢ 1 FILE VÀ NHIỀU FILE)
-// ============================================================
 DOM.btnDelete.addEventListener('click', async () => {
     if (currentMode === 'single') {
         processSinglePDF('delete');
     } else if (currentMode === 'multi') {
-        // Trong chế độ gộp, chỉ cần loại bỏ các trang đã chọn khỏi mảng hiển thị
         const originalLength = documentPages.length;
         documentPages = documentPages.filter(p => !p.selected);
         if (documentPages.length === 0) return alert("Bạn đã xóa hết tất cả các trang!");
@@ -309,7 +344,7 @@ DOM.btnDelete.addEventListener('click', async () => {
 
 
 // ============================================================
-// XEM TOÀN TRANG (ZOOM MODAL) + ĐIỀU HƯỚNG
+// XEM TOÀN TRANG & ĐIỀU HƯỚNG (BÀN PHÍM + CLICK)
 // ============================================================
 async function openZoomModal(index) {
     currentZoomIndex = index;
@@ -319,7 +354,6 @@ async function openZoomModal(index) {
     const isSingle = currentMode === 'single';
     const maxIndex = (isSingle ? pagesData : documentPages).length - 1;
     
-    // Hiện/Ẩn nút điều hướng
     DOM.btnPrevPage.style.display = index > 0 ? 'block' : 'none';
     DOM.btnNextPage.style.display = index < maxIndex ? 'block' : 'none';
 
@@ -327,7 +361,7 @@ async function openZoomModal(index) {
         let pdfDoc, pageNum;
         if (isSingle) {
             pdfDoc = pdfDocuments[0];
-            pageNum = index + 1;
+            pageNum = pagesData[index].sourcePage + 1; // Load đúng vị trí gốc
         } else {
             const item = documentPages[index];
             pdfDoc = pdfDocuments[item.fileIndex];
@@ -336,11 +370,10 @@ async function openZoomModal(index) {
 
         const page = await pdfDoc.getPage(pageNum);
         
-        // Thuật toán tính tỷ lệ Scale vừa khít màn hình
         let viewport = page.getViewport({ scale: 1 });
         const screenWidth = window.innerWidth * 0.85;
         const screenHeight = window.innerHeight * 0.85;
-        const scale = Math.min(screenWidth / viewport.width, screenHeight / viewport.height, 2.5); // Giới hạn zoom max 2.5x để chống lag
+        const scale = Math.min(screenWidth / viewport.width, screenHeight / viewport.height, 2.5); 
         
         viewport = page.getViewport({ scale: scale });
         
@@ -355,22 +388,30 @@ async function openZoomModal(index) {
     }
 }
 
-// Nút qua lại
-DOM.btnPrevPage.addEventListener('click', (e) => {
-    e.stopPropagation();
-    if (currentZoomIndex > 0) openZoomModal(currentZoomIndex - 1);
-});
+// Bấm nút Trên UI
+DOM.btnPrevPage.addEventListener('click', (e) => { e.stopPropagation(); if (currentZoomIndex > 0) openZoomModal(currentZoomIndex - 1); });
 DOM.btnNextPage.addEventListener('click', (e) => {
     e.stopPropagation();
     const max = (currentMode === 'single' ? pagesData : documentPages).length - 1;
     if (currentZoomIndex < max) openZoomModal(currentZoomIndex + 1);
 });
 
-// Đóng Modal
-DOM.closeModal.addEventListener('click', () => DOM.zoomModal.classList.remove('active'));
-DOM.zoomModal.addEventListener('click', e => {
-    if (e.target === DOM.zoomModal) DOM.zoomModal.classList.remove('active');
+// Điều hướng bằng bàn phím
+document.addEventListener('keydown', (e) => {
+    if (!DOM.zoomModal.classList.contains('active')) return;
+    const max = (currentMode === 'single' ? pagesData : documentPages).length - 1;
+    
+    if (e.key === 'ArrowLeft' && currentZoomIndex > 0) {
+        openZoomModal(currentZoomIndex - 1);
+    } else if (e.key === 'ArrowRight' && currentZoomIndex < max) {
+        openZoomModal(currentZoomIndex + 1);
+    } else if (e.key === 'Escape') {
+        DOM.zoomModal.classList.remove('active');
+    }
 });
+
+DOM.closeModal.addEventListener('click', () => DOM.zoomModal.classList.remove('active'));
+DOM.zoomModal.addEventListener('click', e => { if (e.target === DOM.zoomModal) DOM.zoomModal.classList.remove('active'); });
 
 // ============================================================
 // HỖ TRỢ XUẤT FILE & CÁC TÍNH NĂNG KHÁC
@@ -407,7 +448,7 @@ if (DOM.btnRotate) {
     });
 }
 
-// Trích xuất / Xóa (Single)
+// Trích xuất / Xóa (Single) - Đã support đúng vị trí sắp xếp kéo thả
 async function processSinglePDF(mode) {
     showLoading('Đang xử lý...');
     try {
@@ -415,12 +456,22 @@ async function processSinglePDF(mode) {
         const sourcePdf = await PDFDocument.load(buffer);
         const newPdf = await PDFDocument.create();
         
-        const indexes = pagesData.map((p, idx) => (mode === 'extract' && p.selected) || (mode === 'delete' && !p.selected) ? idx : -1).filter(idx => idx !== -1);
-        if (indexes.length === 0) throw new Error(mode === 'extract' ? 'Vui lòng chọn trang để trích xuất!' : 'Bạn đã xóa hết các trang!');
+        const indexesToCopy = [];
+        const rotationsToApply = [];
 
-        const copiedPages = await newPdf.copyPages(sourcePdf, indexes);
+        pagesData.forEach(p => {
+            const keep = (mode === 'extract' && p.selected) || (mode === 'delete' && !p.selected);
+            if (keep) {
+                indexesToCopy.push(p.sourcePage);
+                rotationsToApply.push(p.rotation);
+            }
+        });
+
+        if (indexesToCopy.length === 0) throw new Error(mode === 'extract' ? 'Vui lòng chọn trang để trích xuất!' : 'Bạn đã xóa hết các trang!');
+
+        const copiedPages = await newPdf.copyPages(sourcePdf, indexesToCopy);
         copiedPages.forEach((page, i) => {
-            const rot = pagesData[indexes[i]].rotation;
+            const rot = rotationsToApply[i];
             if (rot !== 0) page.setRotation(degrees(page.getRotation().angle + rot));
             newPdf.addPage(page);
         });
