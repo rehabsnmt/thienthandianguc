@@ -803,122 +803,59 @@ async function createSinglePageCard(
 
 
 // ============================================================
-// 12. LOAD MULTIPLE PDFs
-//
-// Tất cả trang được đưa vào documentPages.
+// 12. LOAD MULTIPLE PDFs (ĐÃ FIX LỖI DETACHED BUFFER)
 // ============================================================
-
 async function loadMultiplePDFs() {
-
-    showLoading(
-        'Đang tải tất cả các trang PDF... Vui lòng đợi.'
-    );
-
+    showLoading('Đang tải tất cả các trang PDF... Vui lòng đợi.');
 
     try {
-
         documentPages = [];
-
-
         pdfDocuments = [];
-
         sourcePdfDocuments = [];
 
+        // Duyệt qua từng file được tải lên
+        for (let fileIndex = 0; fileIndex < uploadedFiles.length; fileIndex++) {
+            const file = uploadedFiles[fileIndex];
+            
+            // Đọc file gốc ra bộ nhớ đệm (Buffer)
+            const buffer = await file.arrayBuffer();
 
-        // ----------------------------------------------------
-        // Đọc từng file
-        // ----------------------------------------------------
+            // FIX: Tạo 2 bản sao độc lập để 2 thư viện không "giành giật" bộ nhớ của nhau
+            const bufferForPdfJs = buffer.slice(0);
+            const bufferForPdfLib = buffer.slice(0);
 
-        for (
-            let fileIndex = 0;
-            fileIndex < uploadedFiles.length;
-            fileIndex++
-        ) {
+            // 1. Cấp cho PDF.js (Để vẽ bản xem trước lên màn hình)
+            const pdfJsDoc = await pdfjsLib.getDocument({
+                data: new Uint8Array(bufferForPdfJs)
+            }).promise;
+            pdfDocuments[fileIndex] = pdfJsDoc;
 
-            const file =
-                uploadedFiles[fileIndex];
-
-
-            const buffer =
-                await file.arrayBuffer();
-
-
-            // PDF.js
-
-            const pdfJsDoc =
-                await pdfjsLib.getDocument({
-                    data:
-                        new Uint8Array(buffer)
-                }).promise;
-
-
-            pdfDocuments[fileIndex] =
-                pdfJsDoc;
-
-
-            // PDF-lib
-
-            const sourcePdf =
-                await PDFDocument.load(
-                    buffer
-                );
-
-
-            sourcePdfDocuments[fileIndex] =
-                sourcePdf;
-
+            // 2. Cấp cho PDF-lib (Để xử lý cấu trúc gộp file ngầm)
+            const sourcePdf = await PDFDocument.load(bufferForPdfLib);
+            sourcePdfDocuments[fileIndex] = sourcePdf;
 
             // ------------------------------------------------
             // Tạo model trang
             // ------------------------------------------------
-
-            for (
-                let pageIndex = 0;
-                pageIndex < pdfJsDoc.numPages;
-                pageIndex++
-            ) {
-
+            for (let pageIndex = 0; pageIndex < pdfJsDoc.numPages; pageIndex++) {
                 documentPages.push({
-
-                    fileIndex:
-                        fileIndex,
-
-                    pageIndex:
-                        pageIndex,
-
-                    rotation:
-                        0,
-
-                    selected:
-                        false
-
+                    fileIndex: fileIndex,
+                    pageIndex: pageIndex,
+                    rotation: 0,
+                    selected: false
                 });
-
             }
-
         }
-
 
         await renderMultiSource();
 
-
     } catch (error) {
-
         console.error(error);
-
-        alert(
-            'Lỗi khi đọc các file PDF: ' +
-            error.message
-        );
-
+        alert('Lỗi khi đọc các file PDF: ' + error.message);
     } finally {
-
         hideLoading();
-
     }
-
 }
-
 
 // ============================================================
 // 13. RENDER MULTI SOURCE
