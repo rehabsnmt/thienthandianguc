@@ -4,148 +4,721 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Xử Lý PDF - Thiên Thần Địa Ngục</title>
-    
+
     <script src="https://unpkg.com/pdf-lib/dist/pdf-lib.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
-    
+
     <style>
         :root {
-            --bg-color: #121212; --card-bg: #1e1e1e; --text-main: #ffffff;
-            --text-muted: #a0a0a0; --accent-color: #ff4757; --accent-hover: #ff6b81;
+            --bg-color: #121212;
+            --card-bg: #1e1e1e;
+            --text-main: #ffffff;
+            --text-muted: #a0a0a0;
+            --accent-color: #ff4757;
+            --accent-hover: #ff6b81;
             --toolbar-bg: #2d2d2d;
         }
 
-        body { font-family: 'Segoe UI', Tahoma, sans-serif; background-color: var(--bg-color); color: var(--text-main); margin: 0; padding: 2rem; display: flex; flex-direction: column; align-items: center; }
-        
-        .header { width: 100%; max-width: 1000px; display: flex; align-items: center; margin-bottom: 2rem; }
-        .back-btn { color: var(--accent-color); text-decoration: none; font-weight: bold; font-size: 1.1rem; margin-right: auto; }
-        h1 { font-size: 2rem; margin: 0; text-align: center; flex-grow: 1; margin-right: 80px; }
+        * {
+            box-sizing: border-box;
+        }
 
-        .container { background-color: var(--card-bg); width: 100%; max-width: 1000px; border-radius: 12px; border-top: 4px solid var(--accent-color); overflow: hidden; position: relative; }
+        body {
+            font-family: 'Segoe UI', Tahoma, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            margin: 0;
+            padding: 2rem;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
 
-        /* MÀN HÌNH 1: UPLOAD */
-        #uploadScreen { padding: 3rem; text-align: center; }
-        .upload-area { border: 2px dashed #444; border-radius: 8px; padding: 3rem 2rem; cursor: pointer; transition: all 0.3s ease; display: block; }
-        .upload-area:hover, .upload-area.dragover { border-color: var(--accent-color); background-color: rgba(255, 71, 87, 0.05); }
-        .upload-area input[type="file"] { display: none; }
-        .upload-icon { font-size: 3rem; margin-bottom: 1rem; display: block; }
+        .header {
+            width: 100%;
+            max-width: 1000px;
+            display: flex;
+            align-items: center;
+            margin-bottom: 2rem;
+        }
 
-        /* MÀN HÌNH 2: WORKSPACE */
-        #workspaceScreen { display: none; flex-direction: column; }
-        
-        .toolbar { background-color: var(--toolbar-bg); padding: 1rem; display: flex; gap: 10px; flex-wrap: wrap; align-items: center; justify-content: space-between;}
-        .tool-group { display: flex; gap: 10px; }
-        .btn { background-color: #444; color: white; border: none; padding: 0.6rem 1.2rem; border-radius: 6px; cursor: pointer; font-weight: bold; transition: 0.2s; }
-        .btn:hover { background-color: #555; }
-        .btn-primary { background-color: var(--accent-color); }
-        .btn-primary:hover { background-color: var(--accent-hover); }
-        .btn-warning { background-color: #f39c12; }
-        .btn-warning:hover { background-color: #e67e22; }
+        .back-btn {
+            color: var(--accent-color);
+            text-decoration: none;
+            font-weight: bold;
+            font-size: 1.1rem;
+            margin-right: auto;
+        }
 
-        /* Lưới hiển thị trang */
-        #previewGrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 20px; padding: 2rem; background-color: #1a1a1a; max-height: 60vh; overflow-y: auto; }
-        
-        .page-card { position: relative; background: #fff; padding: 5px; border-radius: 4px; cursor: pointer; transition: transform 0.2s; border: 3px solid transparent; display: flex; flex-direction: column; align-items: center;}
-        .page-card.selected { border-color: var(--accent-color); }
-        .page-card canvas { max-width: 100%; height: auto; box-shadow: 0 2px 5px rgba(0,0,0,0.2);}
-        .page-number { color: #000; font-size: 0.8rem; font-weight: bold; margin-top: 5px; }
-        
-        .selected-badge { position: absolute; top: -10px; right: -10px; background: var(--accent-color); color: white; width: 24px; height: 24px; border-radius: 50%; display: none; align-items: center; justify-content: center; font-weight: bold; font-size: 12px; z-index: 10; box-shadow: 0 2px 5px rgba(0,0,0,0.5);}
-        .page-card.selected .selected-badge { display: flex; }
+        h1 {
+            font-size: 2rem;
+            margin: 0;
+            text-align: center;
+            flex-grow: 1;
+            margin-right: 80px;
+        }
 
-        /* Nút Zoom hiện ra khi hover */
-        .zoom-btn { position: absolute; bottom: 30px; background: rgba(0, 0, 0, 0.7); color: white; border: none; padding: 8px 12px; border-radius: 4px; cursor: pointer; opacity: 0; transition: opacity 0.2s; font-size: 1.2rem; display: flex; align-items: center; justify-content: center; }
-        .page-card:hover .zoom-btn { opacity: 1; }
-        .zoom-btn:hover { background: var(--accent-color); }
+        .container {
+            background-color: var(--card-bg);
+            width: 100%;
+            max-width: 1000px;
+            border-radius: 12px;
+            border-top: 4px solid var(--accent-color);
+            overflow: hidden;
+            position: relative;
+        }
 
-        /* MODAL PHÓNG TO */
-        #zoomModal { display: none; position: fixed; z-index: 999; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.9); justify-content: center; align-items: center; flex-direction: column; }
-        #zoomModal.active { display: flex; }
-        .close-modal { position: absolute; top: 20px; right: 30px; color: white; font-size: 40px; font-weight: bold; cursor: pointer; }
-        .close-modal:hover { color: var(--accent-color); }
-        #zoomCanvas { max-width: 90%; max-height: 85vh; background: white; border-radius: 4px; }
-        #zoomPageText { margin-top: 15px; font-size: 1.2rem; font-weight: bold; }
+        /* UPLOAD */
 
-        #fileList { padding: 2rem; list-style: none; margin: 0; display: none; }
-        .file-item { background-color: #252525; padding: 15px; border-radius: 6px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; border-left: 3px solid #555; }
-        
-        #loadingMsg { text-align: center; padding: 2rem; display: none; color: var(--accent-color); font-weight: bold; }
+        #uploadScreen {
+            padding: 3rem;
+            text-align: center;
+        }
+
+        .upload-area {
+            border: 2px dashed #444;
+            border-radius: 8px;
+            padding: 3rem 2rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: block;
+        }
+
+        .upload-area:hover,
+        .upload-area.dragover {
+            border-color: var(--accent-color);
+            background-color: rgba(255, 71, 87, 0.05);
+        }
+
+        .upload-area input[type="file"] {
+            display: none;
+        }
+
+        .upload-icon {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+            display: block;
+        }
+
+        /* WORKSPACE */
+
+        #workspaceScreen {
+            display: none;
+            flex-direction: column;
+        }
+
+        .toolbar {
+            background-color: var(--toolbar-bg);
+            padding: 1rem;
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .tool-group {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .btn {
+            background-color: #444;
+            color: white;
+            border: none;
+            padding: 0.6rem 1.2rem;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: 0.2s;
+        }
+
+        .btn:hover {
+            background-color: #555;
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .btn-primary {
+            background-color: var(--accent-color);
+        }
+
+        .btn-primary:hover {
+            background-color: var(--accent-hover);
+        }
+
+        .btn-warning {
+            background-color: #f39c12;
+        }
+
+        .btn-warning:hover {
+            background-color: #e67e22;
+        }
+
+        /* PREVIEW */
+
+        #previewGrid {
+            display: grid;
+            grid-template-columns: repeat(
+                auto-fill,
+                minmax(150px, 1fr)
+            );
+            gap: 20px;
+            padding: 2rem;
+            background-color: #1a1a1a;
+            max-height: 60vh;
+            overflow-y: auto;
+        }
+
+        .page-card {
+            position: relative;
+            background: #fff;
+            padding: 5px;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: transform 0.2s;
+            border: 3px solid transparent;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .page-card.selected {
+            border-color: var(--accent-color);
+        }
+
+        .page-card canvas {
+            max-width: 100%;
+            height: auto;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+        }
+
+        .page-number {
+            color: #000;
+            font-size: 0.8rem;
+            font-weight: bold;
+            margin-top: 5px;
+        }
+
+        .selected-badge {
+            position: absolute;
+            top: -10px;
+            right: -10px;
+            background: var(--accent-color);
+            color: white;
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 12px;
+            z-index: 10;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.5);
+        }
+
+        .page-card.selected .selected-badge {
+            display: flex;
+        }
+
+        /* ZOOM */
+
+        .zoom-btn {
+            position: absolute;
+            bottom: 30px;
+            background: rgba(0, 0, 0, 0.7);
+            color: white;
+            border: none;
+            padding: 8px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            opacity: 0;
+            transition: opacity 0.2s;
+            font-size: 1.2rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .page-card:hover .zoom-btn {
+            opacity: 1;
+        }
+
+        .zoom-btn:hover {
+            background: var(--accent-color);
+        }
+
+        /* ZOOM MODAL */
+
+        #zoomModal {
+            display: none;
+            position: fixed;
+            z-index: 999;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.9);
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+        }
+
+        #zoomModal.active {
+            display: flex;
+        }
+
+        .close-modal {
+            position: absolute;
+            top: 20px;
+            right: 30px;
+            color: white;
+            font-size: 40px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        .close-modal:hover {
+            color: var(--accent-color);
+        }
+
+        #zoomCanvas {
+            max-width: 90%;
+            max-height: 85vh;
+            background: white;
+            border-radius: 4px;
+        }
+
+        #zoomPageText {
+            margin-top: 15px;
+            font-size: 1.2rem;
+            font-weight: bold;
+        }
+
+        /* FILE LIST */
+
+        #fileList {
+            padding: 2rem;
+            list-style: none;
+            margin: 0;
+            display: none;
+        }
+
+        .file-item {
+            background-color: #252525;
+            padding: 15px;
+            border-radius: 6px;
+            margin-bottom: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-left: 3px solid #555;
+        }
+
+        #loadingMsg {
+            text-align: center;
+            padding: 2rem;
+            display: none;
+            color: var(--accent-color);
+            font-weight: bold;
+        }
+
+        /* SECURITY MODAL */
+
+        #securityModal {
+            display: none;
+            position: fixed;
+            z-index: 2000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.85);
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .security-box {
+            background: var(--card-bg);
+            padding: 2rem;
+            border-radius: 12px;
+            width: 100%;
+            max-width: 450px;
+            border: 2px solid var(--accent-color);
+        }
+
+        .security-box h2 {
+            margin-top: 0;
+            color: var(--accent-color);
+            text-align: center;
+        }
+
+        .security-label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+
+        .security-input {
+            width: 100%;
+            padding: 10px;
+            margin-bottom: 15px;
+            background: #111;
+            color: white;
+            border: 1px solid #444;
+            border-radius: 6px;
+            font-size: 15px;
+        }
+
+        .permission-box {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            margin-bottom: 20px;
+            background: #1a1a1a;
+            padding: 15px;
+            border-radius: 6px;
+        }
+
+        .permission-box label {
+            cursor: pointer;
+        }
+
+        .backend-help {
+            color: #888;
+            display: block;
+            margin-top: 5px;
+            margin-bottom: 20px;
+            line-height: 1.4;
+        }
+
+        .security-buttons {
+            display: flex;
+            gap: 10px;
+        }
+
+        .security-buttons button {
+            flex: 1;
+        }
     </style>
 </head>
+
 <body>
 
     <div class="header">
-        <a href="index.html" class="back-btn">⬅ Trang chủ</a>
+        <a href="index.html" class="back-btn">
+            ⬅ Trang chủ
+        </a>
+
         <h1>Công Cụ PDF</h1>
     </div>
 
+
     <div class="container">
-        <!-- SCREEN 1: UPLOAD -->
+
+        <!-- =====================================================
+             SCREEN 1
+        ====================================================== -->
+
         <div id="uploadScreen">
-            <label class="upload-area" id="dropZone">
-                <span class="upload-icon">📄</span>
-                <span style="font-size: 1.2rem; display: block; margin-bottom: 10px;">Nhấp hoặc kéo thả file PDF vào đây</span>
-                <span style="color: var(--text-muted); font-size: 0.9rem;">Chọn 1 file để xem/tách, hoặc nhiều file để gộp</span>
-                <input type="file" id="fileInput" accept="application/pdf" multiple>
+
+            <label
+                class="upload-area"
+                id="dropZone"
+            >
+
+                <span class="upload-icon">
+                    📄
+                </span>
+
+                <span
+                    style="
+                        font-size: 1.2rem;
+                        display: block;
+                        margin-bottom: 10px;
+                    "
+                >
+                    Nhấp hoặc kéo thả file PDF vào đây
+                </span>
+
+                <span
+                    style="
+                        color: var(--text-muted);
+                        font-size: 0.9rem;
+                    "
+                >
+                    Chọn 1 file để xem/tách,
+                    hoặc nhiều file để gộp
+                </span>
+
+                <input
+                    type="file"
+                    id="fileInput"
+                    accept="application/pdf,.pdf"
+                    multiple
+                >
+
             </label>
+
         </div>
 
-        <!-- SCREEN 2: WORKSPACE -->
+
+        <!-- =====================================================
+             SCREEN 2
+        ====================================================== -->
+
         <div id="workspaceScreen">
+
             <div class="toolbar">
-                <div class="tool-group" id="singleFileTools" style="display: none;">
-                    <button class="btn" id="btnSelectAll">Chọn tất cả</button>
-                    <button class="btn" id="btnRotate">Xoay 90°</button>
-                    <button class="btn btn-primary" id="btnExtract">Trích xuất</button>
-                    <button class="btn btn-primary" id="btnDelete">Xóa trang</button>
-                    <button class="btn btn-warning" id="btnPassword">🔒 Đặt mật khẩu</button>
+
+                <div
+                    class="tool-group"
+                    id="singleFileTools"
+                    style="display: none;"
+                >
+
+                    <button
+                        class="btn"
+                        id="btnSelectAll"
+                    >
+                        Chọn tất cả
+                    </button>
+
+                    <button
+                        class="btn"
+                        id="btnRotate"
+                    >
+                        Xoay 90°
+                    </button>
+
+                    <button
+                        class="btn btn-primary"
+                        id="btnExtract"
+                    >
+                        Trích xuất
+                    </button>
+
+                    <button
+                        class="btn btn-primary"
+                        id="btnDelete"
+                    >
+                        Xóa trang
+                    </button>
+
+                    <button
+                        class="btn btn-warning"
+                        id="btnPassword"
+                    >
+                        🔒 Đặt mật khẩu
+                    </button>
+
                 </div>
-                <div class="tool-group" id="multiFileTools" style="display: none;">
-                    <button class="btn btn-primary" id="btnMerge">Gộp tất cả file</button>
+
+
+                <div
+                    class="tool-group"
+                    id="multiFileTools"
+                    style="display: none;"
+                >
+
+                    <button
+                        class="btn btn-primary"
+                        id="btnMerge"
+                    >
+                        Gộp tất cả file
+                    </button>
+
                 </div>
-                <button class="btn" id="btnReset" style="background: transparent; border: 1px solid #555;">Tải file khác</button>
+
+
+                <button
+                    class="btn"
+                    id="btnReset"
+                    style="
+                        background: transparent;
+                        border: 1px solid #555;
+                    "
+                >
+                    Tải file khác
+                </button>
+
             </div>
-            
-            <div id="loadingMsg">Đang tải bản xem trước... Vui lòng đợi.</div>
+
+
+            <div id="loadingMsg">
+                Đang tải bản xem trước...
+                Vui lòng đợi.
+            </div>
+
+
             <div id="previewGrid"></div>
+
+
             <ul id="fileList"></ul>
+
         </div>
+
     </div>
 
-    <!-- MODAL PHÓNG TO ẢNH -->
+
+    <!-- =========================================================
+         ZOOM MODAL
+    ========================================================== -->
+
     <div id="zoomModal">
-        <span class="close-modal" id="closeModal">&times;</span>
+
+        <span
+            class="close-modal"
+            id="closeModal"
+        >
+            &times;
+        </span>
+
         <canvas id="zoomCanvas"></canvas>
-        <div id="zoomPageText">Trang 1</div>
-    </div>
-<!-- BẢNG TÙY CHỈNH BẢO MẬT & API (Chèn ngay trên thẻ script) -->
-    <div id="securityModal" style="display: none; position: fixed; z-index: 999; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.85); justify-content: center; align-items: center;">
-        <div style="background: var(--card-bg); padding: 2rem; border-radius: 12px; width: 100%; max-width: 450px; border: 2px solid var(--accent-color);">
-            <h2 style="margin-top: 0; color: var(--accent-color); text-align: center;">🔒 Khóa Bảo Mật</h2>
-            
-            <label style="display: block; margin-bottom: 5px; font-weight: bold;">Mật khẩu mở file:</label>
-            <input type="text" id="pdfPassword" placeholder="Nhập mật khẩu..." style="width: 100%; padding: 10px; margin-bottom: 15px; background: #111; color: white; border: 1px solid #444; border-radius: 6px; box-sizing: border-box;">
 
-            <label style="display: block; margin-bottom: 10px; font-weight: bold;">Tùy chọn quyền (Bỏ tick để Khóa):</label>
-            <div style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 20px; background: #1a1a1a; padding: 15px; border-radius: 6px;">
-                <label><input type="checkbox" id="chkPrint"> Cho phép In ấn</label>
-                <label><input type="checkbox" id="chkEdit"> Cho phép Chỉnh sửa</label>
-                <label><input type="checkbox" id="chkCopy" checked> Cho phép Copy chữ</label>
-                <label><input type="checkbox" id="chkComment"> Cho phép Nhận xét</label>
-            </div>
-
-            <hr style="border-color: #333; margin-bottom: 15px;">
-            
-            <label style="display: block; margin-bottom: 5px; font-weight: bold;">🔗 Link Backend (Máy chủ xử lý):</label>
-            <input type="text" id="backendUrlInput" value="http://localhost:3000/api/encrypt" style="width: 100%; padding: 10px; background: #111; color: var(--accent-color); border: 1px solid #444; border-radius: 6px; box-sizing: border-box;">
-            <small style="color: #888; display: block; margin-top: 5px; margin-bottom: 20px;">Dùng máy khác? Hãy nhập IP LAN của máy chủ vào đây. URL này sẽ được tự động lưu lại.</small>
-
-            <div style="display: flex; gap: 10px;">
-                <button class="btn btn-primary" id="btnConfirmSecurity" style="flex: 1;">Xác nhận Khóa</button>
-                <button class="btn" id="btnCancelSecurity" style="flex: 1;">Hủy bỏ</button>
-            </div>
+        <div id="zoomPageText">
+            Trang 1
         </div>
+
     </div>
+
+
+    <!-- =========================================================
+         SECURITY MODAL
+    ========================================================== -->
+
+    <div id="securityModal">
+
+        <div class="security-box">
+
+            <h2>
+                🔒 Khóa Bảo Mật PDF
+            </h2>
+
+
+            <!-- OWNER PASSWORD -->
+
+            <label class="security-label">
+                Mật khẩu quản lý quyền:
+            </label>
+
+            <input
+                type="password"
+                id="pdfPassword"
+                class="security-input"
+                placeholder="Nhập Owner Password..."
+                autocomplete="new-password"
+            >
+
+
+            <!-- PERMISSIONS -->
+
+            <label class="security-label">
+                Quyền người dùng
+            </label>
+
+            <div class="permission-box">
+
+                <label>
+                    <input
+                        type="checkbox"
+                        id="chkPrint"
+                    >
+                    Cho phép In ấn
+                </label>
+
+                <label>
+                    <input
+                        type="checkbox"
+                        id="chkEdit"
+                    >
+                    Cho phép Chỉnh sửa
+                </label>
+
+                <label>
+                    <input
+                        type="checkbox"
+                        id="chkCopy"
+                        checked
+                    >
+                    Cho phép Copy chữ
+                </label>
+
+                <label>
+                    <input
+                        type="checkbox"
+                        id="chkComment"
+                    >
+                    Cho phép Nhận xét
+                </label>
+
+            </div>
+
+
+            <hr
+                style="
+                    border-color: #333;
+                    margin-bottom: 15px;
+                "
+            >
+
+
+            <!-- BACKEND -->
+
+            <label class="security-label">
+                🔗 Link Backend
+            </label>
+
+            <input
+                type="text"
+                id="backendUrlInput"
+                value="http://localhost:3000/api/encrypt"
+                class="security-input"
+            >
+
+            <small class="backend-help">
+                Nhập địa chỉ API Backend xử lý PDF.
+                Ví dụ:
+                http://192.168.1.100:3000/api/encrypt
+            </small>
+
+
+            <!-- BUTTONS -->
+
+            <div class="security-buttons">
+
+                <button
+                    class="btn btn-primary"
+                    id="btnConfirmSecurity"
+                >
+                    Xác nhận Khóa
+                </button>
+
+                <button
+                    class="btn"
+                    id="btnCancelSecurity"
+                >
+                    Hủy bỏ
+                </button>
+
+            </div>
+
+        </div>
+
+    </div>
+
+
+    <!-- =========================================================
+         JAVASCRIPT
+    ========================================================== -->
+
     <script src="pdf.js"></script>
+
 </body>
 </html>
