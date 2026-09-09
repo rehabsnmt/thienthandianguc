@@ -1,8 +1,5 @@
-// --- CẤU HÌNH PDF.JS BẮT BUỘC ---
-// Thiết lập worker để pdf.js có thể vẽ ảnh trên trình duyệt
 pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js';
 
-// --- BIẾN TOÀN CỤC ---
 const DOM = {
     uploadScreen: document.getElementById('uploadScreen'),
     workspaceScreen: document.getElementById('workspaceScreen'),
@@ -12,45 +9,43 @@ const DOM = {
     fileList: document.getElementById('fileList'),
     loadingMsg: document.getElementById('loadingMsg'),
     singleTools: document.getElementById('singleFileTools'),
-    multiTools: document.getElementById('multiFileTools')
+    multiTools: document.getElementById('multiFileTools'),
+    
+    // Zoom Modal DOMs
+    zoomModal: document.getElementById('zoomModal'),
+    zoomCanvas: document.getElementById('zoomCanvas'),
+    zoomPageText: document.getElementById('zoomPageText'),
+    closeModal: document.getElementById('closeModal')
 };
 
 let uploadedFiles = [];
 let singleFileBuffer = null;
-let pagesData = []; // Lưu trạng thái từng trang: { selected: false, rotation: 0 }
+let pagesData = []; 
+let currentPdfDoc = null; // Biến lưu trữ PDF để dùng cho tính năng Zoom
 
 // --- 1. XỬ LÝ UPLOAD FILE ---
 DOM.fileInput.addEventListener('change', (e) => handleFiles(e.target.files));
 DOM.dropZone.addEventListener('dragover', (e) => { e.preventDefault(); DOM.dropZone.classList.add('dragover'); });
 DOM.dropZone.addEventListener('dragleave', () => DOM.dropZone.classList.remove('dragover'));
-DOM.dropZone.addEventListener('drop', (e) => {
-    e.preventDefault();
-    DOM.dropZone.classList.remove('dragover');
-    handleFiles(e.dataTransfer.files);
-});
+DOM.dropZone.addEventListener('drop', (e) => { e.preventDefault(); DOM.dropZone.classList.remove('dragover'); handleFiles(e.dataTransfer.files); });
 
 async function handleFiles(files) {
     if (files.length === 0) return;
-    
-    // Chỉ lọc lấy file PDF
     uploadedFiles = Array.from(files).filter(f => f.type === 'application/pdf');
     if (uploadedFiles.length === 0) return alert("Vui lòng chọn file PDF!");
 
-    // Chuyển UI sang Workspace
     DOM.uploadScreen.style.display = 'none';
     DOM.workspaceScreen.style.display = 'flex';
     DOM.previewGrid.innerHTML = '';
     DOM.fileList.innerHTML = '';
 
     if (uploadedFiles.length === 1) {
-        // Chế độ 1 File: Hiện lưới xem trước
         DOM.singleTools.style.display = 'flex';
         DOM.multiTools.style.display = 'none';
         DOM.fileList.style.display = 'none';
         DOM.previewGrid.style.display = 'grid';
         await renderPDFPreview(uploadedFiles[0]);
     } else {
-        // Chế độ Nhiều File: Hiện danh sách để gộp
         DOM.singleTools.style.display = 'none';
         DOM.multiTools.style.display = 'flex';
         DOM.previewGrid.style.display = 'none';
@@ -59,36 +54,34 @@ async function handleFiles(files) {
     }
 }
 
-// --- 2. RENDER XEM TRƯỚC (PDF.JS) ---
+// --- 2. RENDER XEM TRƯỚC VÀ PHÓNG TO ---
 async function renderPDFPreview(file) {
     DOM.loadingMsg.style.display = 'block';
     try {
         singleFileBuffer = await file.arrayBuffer();
-        
-        // Gọi thư viện Mozilla đọc PDF
         const loadingTask = pdfjsLib.getDocument(new Uint8Array(singleFileBuffer));
-        const pdfDoc = await loadingTask.promise;
+        currentPdfDoc = await loadingTask.promise; // Lưu lại để dùng khi phóng to
         
-        pagesData = []; // Reset dữ liệu trang
+        pagesData = []; 
 
-        // Lặp qua từng trang để vẽ lên Canvas
-        for (let i = 1; i <= pdfDoc.numPages; i++) {
+        for (let i = 1; i <= currentPdfDoc.numPages; i++) {
             pagesData.push({ selected: false, rotation: 0 });
 
-            const page = await pdfDoc.getPage(i);
-            const viewport = page.getViewport({ scale: 0.5 }); // Scale nhỏ để load nhanh
+            const page = await currentPdfDoc.getPage(i);
+            const viewport = page.getViewport({ scale: 0.5 }); 
 
-            // Tạo thẻ Card
             const card = document.createElement('div');
             card.className = 'page-card';
-            card.dataset.index = i - 1; // Index mảng (0-based)
+            card.dataset.index = i - 1; 
+            
+            // Cấu trúc Card có thêm nút Kính lúp (Zoom)
             card.innerHTML = `
                 <div class="selected-badge">✓</div>
                 <canvas></canvas>
                 <div class="page-number">Trang ${i}</div>
+                <button class="zoom-btn" title="Phóng to">🔍</button>
             `;
 
-            // Vẽ Canvas
             const canvas = card.querySelector('canvas');
             const ctx = canvas.getContext('2d');
             canvas.height = viewport.height;
@@ -96,11 +89,18 @@ async function renderPDFPreview(file) {
 
             await page.render({ canvasContext: ctx, viewport: viewport }).promise;
 
-            // Xử lý sự kiện click chọn trang
+            // Sự kiện chọn trang
             card.addEventListener('click', () => {
                 const idx = parseInt(card.dataset.index);
                 pagesData[idx].selected = !pagesData[idx].selected;
                 card.classList.toggle('selected');
+            });
+
+            // Sự kiện click nút Kính lúp (Ngăn chặn sự kiện click lan ra ngoài Card)
+            const zoomBtn = card.querySelector('.zoom-btn');
+            zoomBtn.addEventListener('click', (e) => {
+                e.stopPropagation(); // Không cho kích hoạt sự kiện chọn trang
+                openZoomModal(i);
             });
 
             DOM.previewGrid.appendChild(card);
@@ -120,11 +120,38 @@ function renderFileList() {
     });
 }
 
-// --- 3. XỬ LÝ CÁC NÚT TRÊN THANH CÔNG CỤ (PDF-LIB) ---
+// --- 3. LOGIC MODAL PHÓNG TO ---
+async function openZoomModal(pageNum) {
+    if (!currentPdfDoc) return;
+    
+    DOM.zoomModal.classList.add('active');
+    DOM.zoomPageText.innerText = `Đang tải trang ${pageNum}...`;
 
+    try {
+        const page = await currentPdfDoc.getPage(pageNum);
+        // Scale 2.0 để render ảnh chất lượng cao khi phóng to
+        const viewport = page.getViewport({ scale: 2.0 }); 
+        
+        const ctx = DOM.zoomCanvas.getContext('2d');
+        DOM.zoomCanvas.height = viewport.height;
+        DOM.zoomCanvas.width = viewport.width;
+
+        await page.render({ canvasContext: ctx, viewport: viewport }).promise;
+        DOM.zoomPageText.innerText = `Trang ${pageNum}`;
+    } catch (error) {
+        DOM.zoomPageText.innerText = "Lỗi khi tải trang!";
+    }
+}
+
+// Đóng Modal khi click dấu X hoặc click ra ngoài viền
+DOM.closeModal.addEventListener('click', () => DOM.zoomModal.classList.remove('active'));
+DOM.zoomModal.addEventListener('click', (e) => {
+    if (e.target === DOM.zoomModal) DOM.zoomModal.classList.remove('active');
+});
+
+// --- 4. CÁC TÍNH NĂNG TRÊN THANH CÔNG CỤ ---
 const { PDFDocument, degrees } = PDFLib;
 
-// Hàm tải file về máy
 function downloadBlob(bytes, filename) {
     const blob = new Blob([bytes], { type: 'application/pdf' });
     const url = URL.createObjectURL(blob);
@@ -137,38 +164,39 @@ function downloadBlob(bytes, filename) {
     URL.revokeObjectURL(url);
 }
 
-// Nút Quay lại/Tải file khác
 document.getElementById('btnReset').addEventListener('click', () => {
     DOM.fileInput.value = '';
     DOM.workspaceScreen.style.display = 'none';
     DOM.uploadScreen.style.display = 'block';
 });
 
-// Chức năng: Chọn tất cả trang
 document.getElementById('btnSelectAll').addEventListener('click', () => {
     const cards = document.querySelectorAll('.page-card');
     const allSelected = pagesData.every(p => p.selected);
     
     pagesData.forEach((p, idx) => {
-        p.selected = !allSelected; // Nếu đã chọn hết thì bỏ chọn, ngược lại chọn hết
+        p.selected = !allSelected; 
         if (p.selected) cards[idx].classList.add('selected');
         else cards[idx].classList.remove('selected');
     });
 });
 
-// Chức năng: Xoay trang (Giao diện + Dữ liệu)
 document.getElementById('btnRotate').addEventListener('click', () => {
     const cards = document.querySelectorAll('.page-card');
     pagesData.forEach((p, idx) => {
         if (p.selected) {
-            p.rotation = (p.rotation + 90) % 360; // Tăng 90 độ
+            p.rotation = (p.rotation + 90) % 360; 
             const canvas = cards[idx].querySelector('canvas');
-            canvas.style.transform = `rotate(${p.rotation}deg)`; // Quay bằng CSS để user thấy liền
+            canvas.style.transform = `rotate(${p.rotation}deg)`; 
         }
     });
 });
 
-// Lõi xử lý chung cho Trích xuất và Xóa
+// Nút Đặt mật khẩu (Báo hiệu giới hạn hệ thống)
+document.getElementById('btnPassword').addEventListener('click', () => {
+    alert("⚠️ LƯU Ý KỸ THUẬT:\n\nTrang web này hoạt động 100% trên trình duyệt của bạn (không gửi file lên Server để bảo mật dữ liệu tuyệt đối). \n\nTuy nhiên, công nghệ JavaScript Client-side hiện tại chưa hỗ trợ mã hóa (Encrypt) để tạo mật khẩu cho PDF.\n\nTính năng này sẽ được cập nhật trong tương lai khi công nghệ WebAssembly được tích hợp!");
+});
+
 async function processSinglePDF(mode) {
     const btn = event.target;
     const oldText = btn.innerText;
@@ -178,7 +206,6 @@ async function processSinglePDF(mode) {
         const sourcePdf = await PDFDocument.load(singleFileBuffer);
         const newPdf = await PDFDocument.create();
         
-        // Trích xuất: Giữ trang Selected. Xóa: Giữ trang Unselected.
         const targetIndexes = pagesData
             .map((p, idx) => (mode === 'extract' && p.selected) || (mode === 'delete' && !p.selected) ? idx : -1)
             .filter(idx => idx !== -1);
@@ -190,7 +217,6 @@ async function processSinglePDF(mode) {
         const copiedPages = await newPdf.copyPages(sourcePdf, targetIndexes);
         
         copiedPages.forEach((page, i) => {
-            // Áp dụng góc xoay nếu user có bấm xoay
             const originalIndex = targetIndexes[i];
             const addedRotation = pagesData[originalIndex].rotation;
             if (addedRotation > 0) {
@@ -212,7 +238,6 @@ async function processSinglePDF(mode) {
 document.getElementById('btnExtract').addEventListener('click', () => processSinglePDF('extract'));
 document.getElementById('btnDelete').addEventListener('click', () => processSinglePDF('delete'));
 
-// Chức năng: Gộp File
 document.getElementById('btnMerge').addEventListener('click', async (e) => {
     const btn = e.target;
     btn.innerText = "Đang gộp...";
