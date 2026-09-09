@@ -235,30 +235,57 @@ async function processSinglePDF(mode) {
 document.getElementById('btnExtract').addEventListener('click', () => processSinglePDF('extract'));
 document.getElementById('btnDelete').addEventListener('click', () => processSinglePDF('delete'));
 
-// API Khóa mật khẩu qua Backend (FIX LỖI BUFFER)
-document.getElementById('btnPassword').addEventListener('click', async () => {
-    const password = prompt("Vui lòng nhập mật khẩu bạn muốn đặt cho PDF này:");
-    if (!password) return; 
+// --- LOGIC GIAO DIỆN BẢO MẬT ---
+const securityModal = document.getElementById('securityModal');
+const pdfPassword = document.getElementById('pdfPassword');
+const backendUrlInput = document.getElementById('backendUrlInput');
 
-    const btn = document.getElementById('btnPassword');
+// Phục hồi link Backend cũ từ bộ nhớ trình duyệt (nếu có)
+const savedBackendUrl = localStorage.getItem('hellangel_backend_url');
+if (savedBackendUrl) backendUrlInput.value = savedBackendUrl;
+
+// Nút mở bảng bảo mật
+document.getElementById('btnPassword').addEventListener('click', () => {
+    securityModal.style.display = 'flex';
+});
+
+// Nút hủy
+document.getElementById('btnCancelSecurity').addEventListener('click', () => {
+    securityModal.style.display = 'none';
+});
+
+// Nút Xác nhận Khóa (Gửi API)
+document.getElementById('btnConfirmSecurity').addEventListener('click', async () => {
+    const password = pdfPassword.value.trim();
+    const backendUrl = backendUrlInput.value.trim();
+
+    if (!password) return alert("Vui lòng nhập mật khẩu!");
+    
+    // Lưu link Backend lại để lần sau không cần gõ
+    localStorage.setItem('hellangel_backend_url', backendUrl);
+
+    const btn = document.getElementById('btnConfirmSecurity');
     const oldText = btn.innerText;
     btn.innerText = "⏳ Đang khóa...";
     btn.disabled = true;
 
     try {
         const formData = new FormData();
-        // FIX: Đẩy thẳng File gốc vào form, không cần chuyển đổi
         formData.append('pdfFile', currentSingleFile, currentSingleFile.name);
         formData.append('password', password);
-
-        const backendUrl = 'http://localhost:3000/api/encrypt'; 
         
+        // Thu thập các tick chọn quyền
+        formData.append('allowPrint', document.getElementById('chkPrint').checked);
+        formData.append('allowEdit', document.getElementById('chkEdit').checked);
+        formData.append('allowCopy', document.getElementById('chkCopy').checked);
+        formData.append('allowComment', document.getElementById('chkComment').checked);
+
         const response = await fetch(backendUrl, {
             method: 'POST',
             body: formData
         });
 
-        if (!response.ok) throw new Error(`Lỗi máy chủ: Phản hồi ${response.status}`);
+        if (!response.ok) throw new Error(`Phản hồi ${response.status}`);
 
         const encryptedBlob = await response.blob();
         const url = URL.createObjectURL(encryptedBlob);
@@ -271,10 +298,12 @@ document.getElementById('btnPassword').addEventListener('click', async () => {
         
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
+        
+        securityModal.style.display = 'none'; // Thành công thì ẩn bảng
 
     } catch (error) {
         console.error(error);
-        alert("Kết nối tới Backend thất bại! Lỗi: " + error.message);
+        alert("Kết nối tới Backend thất bại! Hãy kiểm tra lại đường link Backend.\nLỗi: " + error.message);
     } finally {
         btn.innerText = oldText;
         btn.disabled = false;
