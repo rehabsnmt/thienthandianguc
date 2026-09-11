@@ -1,304 +1,195 @@
-// ============================================================
-// CẤU HÌNH PDF.JS
-// ============================================================
 pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js';
+const { PDFDocument, degrees } = PDFLib;
 
-// ============================================================
-// DOM
-// ============================================================
+// DOM Elements
 const DOM = {
+    homeScreen: document.getElementById('homeScreen'),
     uploadScreen: document.getElementById('uploadScreen'),
     workspaceScreen: document.getElementById('workspaceScreen'),
+    
     fileInput: document.getElementById('fileInput'),
     dropZone: document.getElementById('dropZone'),
+    uploadTitle: document.getElementById('uploadTitle'),
+    uploadSub: document.getElementById('uploadSub'),
+    
     previewGrid: document.getElementById('previewGrid'),
-    fileList: document.getElementById('fileList'),
     loadingMsg: document.getElementById('loadingMsg'),
     
-    sharedTools: document.getElementById('sharedTools'),
-    singleTools: document.getElementById('singleFileTools'),
-    multiTools: document.getElementById('multiFileTools'),
-    
+    btnBackHome: document.getElementById('btnBackHome'),
+    btnCancel: document.getElementById('btnCancel'),
+    btnExecute: document.getElementById('btnExecute'),
+    btnSelectAll: document.getElementById('btnSelectAll'),
+    btnInvert: document.getElementById('btnInvert'),
+    btnActionRotate: document.getElementById('btnActionRotate'),
+
     zoomModal: document.getElementById('zoomModal'),
     zoomCanvas: document.getElementById('zoomCanvas'),
     zoomPageText: document.getElementById('zoomPageText'),
     closeModal: document.getElementById('closeModal'),
     btnPrevPage: document.getElementById('btnPrevPage'),
-    btnNextPage: document.getElementById('btnNextPage'),
-    
-    btnReset: document.getElementById('btnReset'),
-    btnSelectAll: document.getElementById('btnSelectAll'),
-    btnInvertSelect: document.getElementById('btnInvertSelect'),
-    btnRotate: document.getElementById('btnRotate'),
-    btnExtract: document.getElementById('btnExtract'),
-    btnDelete: document.getElementById('btnDelete'),
-    btnPassword: document.getElementById('btnPassword'),
-    btnMerge: document.getElementById('btnMerge')
+    btnNextPage: document.getElementById('btnNextPage')
 };
 
-// BIẾN TOÀN CỤC
+// State Variables
+let currentMode = ''; // merge, extract, delete, rotate
 let uploadedFiles = [];
 let pdfDocuments = [];
 let sourcePdfDocuments = [];
-let currentMode = 'none';
-let currentSingleFile = null;
-let pagesData = [];
-let documentPages = [];
-let currentZoomIndex = -1; 
+let pagesData = []; // Model lưu trữ chung cho cả 1 file và nhiều file
+let currentZoomIndex = -1;
 
-const { PDFDocument, degrees } = PDFLib;
+// ==========================================
+// BƯỚC 1: CHỌN TÍNH NĂNG
+// ==========================================
+document.querySelectorAll('.mode-card').forEach(card => {
+    card.addEventListener('click', () => {
+        currentMode = card.dataset.mode;
+        DOM.homeScreen.style.display = 'none';
+        DOM.uploadScreen.style.display = 'block';
 
-// ============================================================
-// UPLOAD FILE
-// ============================================================
+        if (currentMode === 'merge') {
+            DOM.fileInput.multiple = true;
+            DOM.uploadTitle.innerText = 'Kéo thả nhiều file PDF vào đây';
+            DOM.uploadSub.innerText = 'Sau đó bạn có thể kéo thả để đổi vị trí các trang';
+        } else {
+            DOM.fileInput.multiple = false;
+            DOM.uploadTitle.innerText = 'Kéo thả 1 file PDF vào đây';
+            DOM.uploadSub.innerText = currentMode === 'rotate' ? 'Để xoay các trang bị ngược' : 'Để chọn các trang cần xử lý';
+        }
+    });
+});
+
+DOM.btnBackHome.addEventListener('click', resetToHome);
+DOM.btnCancel.addEventListener('click', resetToHome);
+
+function resetToHome() {
+    DOM.workspaceScreen.style.display = 'none';
+    DOM.uploadScreen.style.display = 'none';
+    DOM.homeScreen.style.display = 'block';
+    DOM.fileInput.value = '';
+    uploadedFiles = []; pdfDocuments = []; sourcePdfDocuments = []; pagesData = [];
+}
+
+// ==========================================
+// BƯỚC 2: UPLOAD & PHÂN TÍCH FILE
+// ==========================================
 DOM.fileInput.addEventListener('change', e => handleFiles(e.target.files));
-DOM.dropZone.addEventListener('dragover', e => { e.preventDefault(); DOM.dropZone.classList.add('dragover'); });
-DOM.dropZone.addEventListener('dragleave', () => DOM.dropZone.classList.remove('dragover'));
-DOM.dropZone.addEventListener('drop', e => { e.preventDefault(); DOM.dropZone.classList.remove('dragover'); handleFiles(e.dataTransfer.files); });
+DOM.dropZone.addEventListener('dragover', e => { e.preventDefault(); DOM.dropZone.classList.add('drag-over'); });
+DOM.dropZone.addEventListener('dragleave', () => DOM.dropZone.classList.remove('drag-over'));
+DOM.dropZone.addEventListener('drop', e => { e.preventDefault(); DOM.dropZone.classList.remove('drag-over'); handleFiles(e.dataTransfer.files); });
 
 async function handleFiles(files) {
-    if (!files || files.length === 0) return;
-    uploadedFiles = Array.from(files).filter(file => file.type === 'application/pdf');
-    if (uploadedFiles.length === 0) return alert('Vui lòng chọn file PDF!');
+    const validFiles = Array.from(files).filter(f => f.type === 'application/pdf');
+    if (validFiles.length === 0) return alert("Vui lòng chọn file PDF!");
+    if (currentMode === 'merge' && validFiles.length < 2) return alert("Vui lòng chọn từ 2 file trở lên để Gộp!");
 
-    pdfDocuments = [];
-    sourcePdfDocuments = [];
-    pagesData = [];
-    documentPages = [];
+    uploadedFiles = currentMode === 'merge' ? validFiles : [validFiles[0]];
     
-    currentMode = uploadedFiles.length === 1 ? 'single' : 'multi';
-    currentSingleFile = currentMode === 'single' ? uploadedFiles[0] : null;
-
     DOM.uploadScreen.style.display = 'none';
     DOM.workspaceScreen.style.display = 'flex';
-    DOM.previewGrid.innerHTML = '';
-    DOM.fileList.innerHTML = '';
+    setupWorkspaceUI();
     
-    DOM.sharedTools.style.display = 'flex'; 
-
-    if (currentMode === 'single') {
-        DOM.singleTools.style.display = 'flex';
-        DOM.multiTools.style.display = 'none';
-        DOM.fileList.style.display = 'none';
-        DOM.previewGrid.style.display = 'block'; // Đổi thành block để bọc Grid + Header
-        await loadSinglePDF(currentSingleFile);
-    } else {
-        DOM.singleTools.style.display = 'none';
-        DOM.multiTools.style.display = 'flex';
-        DOM.fileList.style.display = 'none';
-        DOM.previewGrid.style.display = 'block';
-        await loadMultiplePDFs();
-    }
-}
-
-// ============================================================
-// LOAD SINGLE PDF
-// ============================================================
-async function loadSinglePDF(file) {
-    showLoading('Đang tải bản xem trước... Vui lòng đợi.');
+    DOM.loadingMsg.style.display = 'block';
+    
     try {
-        const buffer = await file.arrayBuffer();
-        const pdfJsDoc = await pdfjsLib.getDocument({ data: new Uint8Array(buffer) }).promise;
-        pdfDocuments = [pdfJsDoc];
-
-        for (let i = 0; i < pdfJsDoc.numPages; i++) {
-            // sourcePage lưu vị trí gốc của trang để phục vụ cho tính năng sắp xếp
-            pagesData.push({ sourcePage: i, selected: false, rotation: 0 });
-        }
-        await renderSingleSource();
-    } catch (error) {
-        alert('Lỗi khi đọc file PDF: ' + error.message);
-    } finally {
-        hideLoading();
-    }
-}
-
-async function renderSingleSource() {
-    DOM.previewGrid.innerHTML = '';
-    
-    const header = document.createElement('div');
-    header.className = 'multi-preview-header';
-    header.innerHTML = `
-        <div><strong>Tất cả các trang</strong> <span style="color:#94a3b8; font-size:14px; margin-left:10px;">${pagesData.length} trang</span></div>
-        <div style="color:#94a3b8; font-size:13px;">Kéo thả để sắp xếp vị trí</div>
-    `;
-    DOM.previewGrid.appendChild(header);
-
-    const grid = document.createElement('div');
-    grid.id = 'singlePageGrid';
-    grid.style.cssText = 'display: grid; grid-template-columns: repeat(auto-fill, minmax(145px, 1fr)); gap: 18px; padding: 10px 0;';
-    DOM.previewGrid.appendChild(grid);
-
-    for (let i = 0; i < pagesData.length; i++) await createSinglePageCard(i, grid);
-}
-
-async function createSinglePageCard(pageIndex, grid) {
-    const data = pagesData[pageIndex];
-    const page = await pdfDocuments[0].getPage(data.sourcePage + 1); // Render trang đúng với vị trí gốc
-    const viewport = page.getViewport({ scale: 0.5 });
-    
-    const card = document.createElement('div');
-    card.className = 'page-card';
-    card.draggable = true;
-    card.dataset.index = pageIndex;
-    
-    card.innerHTML = `
-        <div class="selected-badge">✓</div>
-        <canvas></canvas>
-        <div class="page-number">Trang ${data.sourcePage + 1}</div>
-        <button class="zoom-btn" title="Xem toàn trang">🔍</button>
-    `;
-
-    const canvas = card.querySelector('canvas');
-    canvas.width = viewport.width;
-    canvas.height = viewport.height;
-    await page.render({ canvasContext: canvas.getContext('2d'), viewport: viewport }).promise;
-
-    applyCardRotation(card, data.rotation);
-
-    card.addEventListener('click', () => {
-        data.selected = !data.selected;
-        card.classList.toggle('selected', data.selected);
-    });
-
-    card.querySelector('.zoom-btn').addEventListener('click', e => {
-        e.stopPropagation();
-        openZoomModal(pageIndex); 
-    });
-
-    // Tính năng Kéo & Thả cho Single Mode
-    card.addEventListener('dragstart', e => {
-        card.classList.add('dragging');
-        e.dataTransfer.setData('text/plain', pageIndex);
-    });
-    card.addEventListener('dragend', () => {
-        card.classList.remove('dragging');
-        document.querySelectorAll('.page-card').forEach(el => el.classList.remove('drag-over'));
-    });
-    card.addEventListener('dragover', e => { e.preventDefault(); card.classList.add('drag-over'); });
-    card.addEventListener('dragleave', () => card.classList.remove('drag-over'));
-    card.addEventListener('drop', async e => {
-        e.preventDefault();
-        const fromIndex = parseInt(e.dataTransfer.getData('text/plain'));
-        const targetIndex = parseInt(card.dataset.index);
-        if (fromIndex !== targetIndex) {
-            const movedPage = pagesData.splice(fromIndex, 1)[0];
-            pagesData.splice(targetIndex, 0, movedPage);
-            await renderSingleSource();
-        }
-    });
-
-    grid.appendChild(card);
-}
-
-// ============================================================
-// LOAD MULTIPLE PDFs
-// ============================================================
-async function loadMultiplePDFs() {
-    showLoading('Đang tải tất cả các trang PDF...');
-    try {
-        for (let fileIndex = 0; fileIndex < uploadedFiles.length; fileIndex++) {
-            const file = uploadedFiles[fileIndex];
-            const buffer = await file.arrayBuffer();
+        for (let fileIdx = 0; fileIdx < uploadedFiles.length; fileIdx++) {
+            const buffer = await uploadedFiles[fileIdx].arrayBuffer();
             
+            sourcePdfDocuments[fileIdx] = await PDFDocument.load(buffer.slice(0));
             const pdfJsDoc = await pdfjsLib.getDocument({ data: new Uint8Array(buffer.slice(0)) }).promise;
-            pdfDocuments[fileIndex] = pdfJsDoc;
+            pdfDocuments[fileIdx] = pdfJsDoc;
 
-            const sourcePdf = await PDFDocument.load(buffer.slice(0));
-            sourcePdfDocuments[fileIndex] = sourcePdf;
-
-            for (let pageIndex = 0; pageIndex < pdfJsDoc.numPages; pageIndex++) {
-                documentPages.push({ fileIndex, pageIndex, rotation: 0, selected: false });
+            for (let pageIdx = 0; pageIdx < pdfJsDoc.numPages; pageIdx++) {
+                pagesData.push({ fileIdx, pageIdx, selected: false, rotation: 0 });
             }
         }
-        await renderMultiSource();
+        await renderGrid();
     } catch (error) {
-        alert('Lỗi: ' + error.message);
-    } finally {
-        hideLoading();
+        alert("Lỗi tải file: " + error.message);
+        resetToHome();
     }
+    DOM.loadingMsg.style.display = 'none';
 }
 
-async function renderMultiSource() {
+function setupWorkspaceUI() {
+    // Ẩn hiện các nút công cụ tùy theo Mode
+    const isSelectionMode = ['extract', 'delete', 'rotate'].includes(currentMode);
+    DOM.btnSelectAll.style.display = isSelectionMode ? 'block' : 'none';
+    DOM.btnInvert.style.display = isSelectionMode ? 'block' : 'none';
+    DOM.btnActionRotate.style.display = currentMode === 'rotate' ? 'block' : 'none';
+
+    // Đổi tên nút Thực Thi
+    const executeTitles = {
+        'merge': '⬇ Xuất File Đã Gộp',
+        'extract': '⬇ Trích Xuất File',
+        'delete': '⬇ Xóa & Xuất File',
+        'rotate': '⬇ Xuất File Đã Xoay'
+    };
+    DOM.btnExecute.innerText = executeTitles[currentMode];
+}
+
+// ==========================================
+// BƯỚC 3: RENDER GIAO DIỆN XEM TRƯỚC VÀ KÉO THẢ
+// ==========================================
+async function renderGrid() {
     DOM.previewGrid.innerHTML = '';
     
-    const header = document.createElement('div');
-    header.className = 'multi-preview-header';
-    header.innerHTML = `
-        <div><strong>Tất cả các trang</strong> <span style="color:#94a3b8; font-size:14px; margin-left:10px;">${documentPages.length} trang</span></div>
-        <div style="color:#94a3b8; font-size:13px;">Kéo thả để sắp xếp vị trí</div>
-    `;
-    DOM.previewGrid.appendChild(header);
+    for (let i = 0; i < pagesData.length; i++) {
+        const item = pagesData[i];
+        const page = await pdfDocuments[item.fileIdx].getPage(item.pageIdx + 1);
+        const viewport = page.getViewport({ scale: 0.4 });
+        
+        const card = document.createElement('div');
+        card.className = 'page-card';
+        card.draggable = true;
+        card.dataset.index = i;
+        if(item.selected) card.classList.add('selected');
+        
+        const titleText = currentMode === 'merge' ? uploadedFiles[item.fileIdx].name : `Trang ${item.pageIdx + 1}`;
 
-    const grid = document.createElement('div');
-    grid.id = 'multiPageGrid';
-    grid.style.cssText = 'display: grid; grid-template-columns: repeat(auto-fill, minmax(145px, 1fr)); gap: 18px; padding: 10px 0;';
-    DOM.previewGrid.appendChild(grid);
+        card.innerHTML = `
+            <div class="selected-badge">✓</div>
+            <canvas></canvas>
+            <div class="page-number" style="font-size:0.75rem; color:#64748b; margin-top:5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${titleText}</div>
+            <button class="zoom-btn" title="Xem toàn trang">🔍</button>
+        `;
+        
+        const canvas = card.querySelector('canvas');
+        canvas.width = viewport.width; canvas.height = viewport.height;
+        await page.render({ canvasContext: canvas.getContext('2d'), viewport: viewport }).promise;
+        applyCardRotation(card, item.rotation);
 
-    for (let i = 0; i < documentPages.length; i++) await createMultiPageCard(i, grid);
-}
-
-async function createMultiPageCard(documentIndex, grid) {
-    const item = documentPages[documentIndex];
-    const pdfDoc = pdfDocuments[item.fileIndex];
-    const page = await pdfDoc.getPage(item.pageIndex + 1);
-    const viewport = page.getViewport({ scale: 0.5 });
-    
-    const card = document.createElement('div');
-    card.className = 'page-card multi-page-card';
-    card.draggable = true;
-    card.dataset.index = documentIndex;
-    
-    const fileName = uploadedFiles[item.fileIndex].name;
-
-    card.innerHTML = `
-        <div class="selected-badge">✓</div>
-        <canvas></canvas>
-        <div class="page-number">Trang ${item.pageIndex + 1}</div>
-        <div class="multi-page-source" title="${fileName}">${fileName}</div>
-        <button class="zoom-btn" title="Xem toàn trang">🔍</button>
-    `;
-
-    const canvas = card.querySelector('canvas');
-    canvas.width = viewport.width;
-    canvas.height = viewport.height;
-    await page.render({ canvasContext: canvas.getContext('2d'), viewport: viewport }).promise;
-
-    applyCardRotation(card, item.rotation);
-
-    card.addEventListener('click', () => {
-        item.selected = !item.selected;
-        card.classList.toggle('selected', item.selected);
-    });
-
-    card.querySelector('.zoom-btn').addEventListener('click', e => {
-        e.stopPropagation();
-        openZoomModal(documentIndex);
-    });
-
-    // Kéo Thả Multi Mode
-    card.addEventListener('dragstart', e => {
-        card.classList.add('dragging');
-        e.dataTransfer.setData('text/plain', documentIndex);
-    });
-    card.addEventListener('dragend', () => {
-        card.classList.remove('dragging');
-        document.querySelectorAll('.multi-page-card').forEach(el => el.classList.remove('drag-over'));
-    });
-    card.addEventListener('dragover', e => { e.preventDefault(); card.classList.add('drag-over'); });
-    card.addEventListener('dragleave', () => card.classList.remove('drag-over'));
-    card.addEventListener('drop', async e => {
-        e.preventDefault();
-        const fromIndex = parseInt(e.dataTransfer.getData('text/plain'));
-        const targetIndex = parseInt(card.dataset.index);
-        if (fromIndex !== targetIndex) {
-            const movedPage = documentPages.splice(fromIndex, 1)[0];
-            documentPages.splice(targetIndex, 0, movedPage);
-            await renderMultiSource();
+        // Click chọn trang
+        if (currentMode !== 'merge') {
+            card.addEventListener('click', () => {
+                item.selected = !item.selected;
+                card.classList.toggle('selected', item.selected);
+            });
         }
-    });
 
-    grid.appendChild(card);
+        // Click Phóng to
+        card.querySelector('.zoom-btn').addEventListener('click', e => {
+            e.stopPropagation(); openZoomModal(i);
+        });
+
+        // Kéo thả sắp xếp
+        card.addEventListener('dragstart', e => { card.classList.add('dragging'); e.dataTransfer.setData('text/plain', i); });
+        card.addEventListener('dragend', () => card.classList.remove('dragging'));
+        card.addEventListener('dragover', e => { e.preventDefault(); card.classList.add('drag-over'); });
+        card.addEventListener('dragleave', () => card.classList.remove('drag-over'));
+        card.addEventListener('drop', async e => {
+            e.preventDefault();
+            const fromIdx = parseInt(e.dataTransfer.getData('text/plain'));
+            const toIdx = parseInt(card.dataset.index);
+            if (fromIdx !== toIdx) {
+                const movedPage = pagesData.splice(fromIdx, 1)[0];
+                pagesData.splice(toIdx, 0, movedPage);
+                await renderGrid(); 
+            }
+        });
+
+        DOM.previewGrid.appendChild(card);
+    }
 }
 
 function applyCardRotation(card, rotation) {
@@ -306,75 +197,76 @@ function applyCardRotation(card, rotation) {
     if (canvas) canvas.style.transform = `rotate(${rotation}deg)`;
 }
 
-// ============================================================
-// LOGIC CHỌN TRANG (CHUNG)
-// ============================================================
-function updateSelectionUI() {
-    const isSingle = currentMode === 'single';
-    const selector = isSingle ? '#singlePageGrid .page-card' : '#multiPageGrid .multi-page-card';
-    const dataArr = isSingle ? pagesData : documentPages;
+// Các nút phụ trợ
+DOM.btnSelectAll.addEventListener('click', () => { pagesData.forEach(p => p.selected = true); renderGrid(); });
+DOM.btnInvert.addEventListener('click', () => { pagesData.forEach(p => p.selected = !p.selected); renderGrid(); });
+DOM.btnActionRotate.addEventListener('click', () => {
+    pagesData.forEach(p => { if (p.selected) p.rotation = (p.rotation + 90) % 360; });
+    renderGrid();
+});
+
+// ==========================================
+// BƯỚC 4: THỰC THI (XUẤT PDF)
+// ==========================================
+DOM.btnExecute.addEventListener('click', async () => {
+    DOM.loadingMsg.innerText = "Đang xử lý...";
+    DOM.loadingMsg.style.display = 'block';
     
-    document.querySelectorAll(selector).forEach((card, idx) => {
-        card.classList.toggle('selected', dataArr[idx].selected);
-    });
-}
+    try {
+        const newPdf = await PDFDocument.create();
+        
+        // Lọc ra các trang cần giữ lại dựa theo Mode
+        let pagesToKeep = [];
+        if (currentMode === 'merge' || currentMode === 'rotate') {
+            pagesToKeep = pagesData; // Giữ hết
+        } else if (currentMode === 'extract') {
+            pagesToKeep = pagesData.filter(p => p.selected);
+        } else if (currentMode === 'delete') {
+            pagesToKeep = pagesData.filter(p => !p.selected);
+        }
 
-DOM.btnSelectAll.addEventListener('click', () => {
-    const arr = currentMode === 'single' ? pagesData : documentPages;
-    arr.forEach(p => p.selected = true);
-    updateSelectionUI();
-});
+        if (pagesToKeep.length === 0) throw new Error("Không có trang nào để xuất! Vui lòng kiểm tra lại thao tác.");
 
-DOM.btnInvertSelect.addEventListener('click', () => {
-    const arr = currentMode === 'single' ? pagesData : documentPages;
-    arr.forEach(p => p.selected = !p.selected);
-    updateSelectionUI();
-});
-
-DOM.btnDelete.addEventListener('click', async () => {
-    if (currentMode === 'single') {
-        processSinglePDF('delete');
-    } else if (currentMode === 'multi') {
-        const originalLength = documentPages.length;
-        documentPages = documentPages.filter(p => !p.selected);
-        if (documentPages.length === 0) return alert("Bạn đã xóa hết tất cả các trang!");
-        if (documentPages.length !== originalLength) await renderMultiSource();
+        for (const item of pagesToKeep) {
+            const sourcePdf = sourcePdfDocuments[item.fileIdx];
+            const copiedPages = await newPdf.copyPages(sourcePdf, [item.pageIdx]);
+            const page = copiedPages[0];
+            
+            if (item.rotation !== 0) page.setRotation(degrees(page.getRotation().angle + item.rotation));
+            newPdf.addPage(page);
+        }
+        
+        const bytes = await newPdf.save();
+        const blob = new Blob([bytes], { type: 'application/pdf' });
+        const url = URL.createObjectURL(blob);
+        
+        const a = document.createElement('a');
+        a.href = url; a.download = `ThienThanDiaNguc_${currentMode}_${Date.now()}.pdf`;
+        document.body.appendChild(a); a.click(); document.body.removeChild(a);
+        
+    } catch (error) {
+        alert(error.message);
     }
+    DOM.loadingMsg.style.display = 'none';
 });
 
-
-// ============================================================
-// XEM TOÀN TRANG & ĐIỀU HƯỚNG (BÀN PHÍM + CLICK)
-// ============================================================
+// ==========================================
+// MODAL ZOOM & ĐIỀU HƯỚNG
+// ==========================================
 async function openZoomModal(index) {
     currentZoomIndex = index;
     DOM.zoomModal.classList.add('active');
     DOM.zoomPageText.innerText = `Đang tải...`;
     
-    const isSingle = currentMode === 'single';
-    const maxIndex = (isSingle ? pagesData : documentPages).length - 1;
-    
     DOM.btnPrevPage.style.display = index > 0 ? 'block' : 'none';
-    DOM.btnNextPage.style.display = index < maxIndex ? 'block' : 'none';
+    DOM.btnNextPage.style.display = index < pagesData.length - 1 ? 'block' : 'none';
 
     try {
-        let pdfDoc, pageNum;
-        if (isSingle) {
-            pdfDoc = pdfDocuments[0];
-            pageNum = pagesData[index].sourcePage + 1; // Load đúng vị trí gốc
-        } else {
-            const item = documentPages[index];
-            pdfDoc = pdfDocuments[item.fileIndex];
-            pageNum = item.pageIndex + 1;
-        }
-
-        const page = await pdfDoc.getPage(pageNum);
+        const item = pagesData[index];
+        const page = await pdfDocuments[item.fileIdx].getPage(item.pageIdx + 1);
         
         let viewport = page.getViewport({ scale: 1 });
-        const screenWidth = window.innerWidth * 0.85;
-        const screenHeight = window.innerHeight * 0.85;
-        const scale = Math.min(screenWidth / viewport.width, screenHeight / viewport.height, 2.5); 
-        
+        const scale = Math.min((window.innerWidth * 0.85) / viewport.width, (window.innerHeight * 0.85) / viewport.height, 2.5); 
         viewport = page.getViewport({ scale: scale });
         
         const ctx = DOM.zoomCanvas.getContext('2d');
@@ -382,165 +274,21 @@ async function openZoomModal(index) {
         DOM.zoomCanvas.height = viewport.height;
         await page.render({ canvasContext: ctx, viewport: viewport }).promise;
         
-        DOM.zoomPageText.innerText = isSingle ? `Trang ${pageNum}` : `Trang ${pageNum} (${uploadedFiles[documentPages[index].fileIndex].name})`;
+        DOM.zoomPageText.innerText = currentMode === 'merge' ? `${uploadedFiles[item.fileIdx].name} (Trang ${item.pageIdx + 1})` : `Trang ${item.pageIdx + 1}`;
     } catch (error) {
         DOM.zoomPageText.innerText = "Lỗi tải trang!";
     }
 }
 
-// Bấm nút Trên UI
 DOM.btnPrevPage.addEventListener('click', (e) => { e.stopPropagation(); if (currentZoomIndex > 0) openZoomModal(currentZoomIndex - 1); });
-DOM.btnNextPage.addEventListener('click', (e) => {
-    e.stopPropagation();
-    const max = (currentMode === 'single' ? pagesData : documentPages).length - 1;
-    if (currentZoomIndex < max) openZoomModal(currentZoomIndex + 1);
-});
+DOM.btnNextPage.addEventListener('click', (e) => { e.stopPropagation(); if (currentZoomIndex < pagesData.length - 1) openZoomModal(currentZoomIndex + 1); });
 
-// Điều hướng bằng bàn phím
 document.addEventListener('keydown', (e) => {
     if (!DOM.zoomModal.classList.contains('active')) return;
-    const max = (currentMode === 'single' ? pagesData : documentPages).length - 1;
-    
-    if (e.key === 'ArrowLeft' && currentZoomIndex > 0) {
-        openZoomModal(currentZoomIndex - 1);
-    } else if (e.key === 'ArrowRight' && currentZoomIndex < max) {
-        openZoomModal(currentZoomIndex + 1);
-    } else if (e.key === 'Escape') {
-        DOM.zoomModal.classList.remove('active');
-    }
+    if (e.key === 'ArrowLeft' && currentZoomIndex > 0) openZoomModal(currentZoomIndex - 1);
+    else if (e.key === 'ArrowRight' && currentZoomIndex < pagesData.length - 1) openZoomModal(currentZoomIndex + 1);
+    else if (e.key === 'Escape') DOM.zoomModal.classList.remove('active');
 });
 
 DOM.closeModal.addEventListener('click', () => DOM.zoomModal.classList.remove('active'));
 DOM.zoomModal.addEventListener('click', e => { if (e.target === DOM.zoomModal) DOM.zoomModal.classList.remove('active'); });
-
-// ============================================================
-// HỖ TRỢ XUẤT FILE & CÁC TÍNH NĂNG KHÁC
-// ============================================================
-function downloadBlob(bytes, filename) {
-    const blob = new Blob([bytes], { type: 'application/pdf' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url; a.download = filename;
-    document.body.appendChild(a); a.click(); document.body.removeChild(a);
-    setTimeout(() => URL.revokeObjectURL(url), 100);
-}
-
-function showLoading(msg) { DOM.loadingMsg.innerText = msg; DOM.loadingMsg.style.display = 'block'; }
-function hideLoading() { DOM.loadingMsg.style.display = 'none'; }
-
-DOM.btnReset.addEventListener('click', () => {
-    DOM.fileInput.value = '';
-    DOM.workspaceScreen.style.display = 'none';
-    DOM.uploadScreen.style.display = 'block';
-});
-
-if (DOM.btnRotate) {
-    DOM.btnRotate.addEventListener('click', () => {
-        let count = 0;
-        pagesData.forEach((page, index) => {
-            if (page.selected) {
-                page.rotation = (page.rotation + 90) % 360;
-                applyCardRotation(document.querySelector(`.page-card[data-index="${index}"]`), page.rotation);
-                count++;
-            }
-        });
-        if (count === 0) alert('Vui lòng chọn ít nhất 1 trang để xoay.');
-    });
-}
-
-// Trích xuất / Xóa (Single) - Đã support đúng vị trí sắp xếp kéo thả
-async function processSinglePDF(mode) {
-    showLoading('Đang xử lý...');
-    try {
-        const buffer = await currentSingleFile.arrayBuffer();
-        const sourcePdf = await PDFDocument.load(buffer);
-        const newPdf = await PDFDocument.create();
-        
-        const indexesToCopy = [];
-        const rotationsToApply = [];
-
-        pagesData.forEach(p => {
-            const keep = (mode === 'extract' && p.selected) || (mode === 'delete' && !p.selected);
-            if (keep) {
-                indexesToCopy.push(p.sourcePage);
-                rotationsToApply.push(p.rotation);
-            }
-        });
-
-        if (indexesToCopy.length === 0) throw new Error(mode === 'extract' ? 'Vui lòng chọn trang để trích xuất!' : 'Bạn đã xóa hết các trang!');
-
-        const copiedPages = await newPdf.copyPages(sourcePdf, indexesToCopy);
-        copiedPages.forEach((page, i) => {
-            const rot = rotationsToApply[i];
-            if (rot !== 0) page.setRotation(degrees(page.getRotation().angle + rot));
-            newPdf.addPage(page);
-        });
-
-        const pdfBytes = await newPdf.save();
-        downloadBlob(pdfBytes, `ThienThanDiaNguc_${mode}_${Date.now()}.pdf`);
-    } catch (error) {
-        alert(error.message);
-    } finally {
-        hideLoading();
-    }
-}
-if (DOM.btnExtract) DOM.btnExtract.addEventListener('click', () => processSinglePDF('extract'));
-
-// Gộp (Multi)
-if (DOM.btnMerge) {
-    DOM.btnMerge.addEventListener('click', async () => {
-        showLoading('Đang xử lý gộp file...');
-        try {
-            if (documentPages.length === 0) throw new Error('Không có trang để gộp.');
-            const mergedPdf = await PDFDocument.create();
-            
-            for (const item of documentPages) {
-                const sourcePdf = sourcePdfDocuments[item.fileIndex];
-                const copiedPages = await mergedPdf.copyPages(sourcePdf, [item.pageIndex]);
-                mergedPdf.addPage(copiedPages[0]);
-            }
-            const bytes = await mergedPdf.save();
-            downloadBlob(bytes, `ThienThanDiaNguc_Merged_${Date.now()}.pdf`);
-        } catch (error) {
-            alert(error.message);
-        } finally {
-            hideLoading();
-        }
-    });
-}
-
-// LOGIC BẢO MẬT API
-const securityModal = document.getElementById('securityModal');
-if (DOM.btnPassword) DOM.btnPassword.addEventListener('click', () => securityModal.style.display = 'flex');
-document.getElementById('btnCancelSecurity').addEventListener('click', () => securityModal.style.display = 'none');
-
-document.getElementById('btnConfirmSecurity').addEventListener('click', async () => {
-    const password = document.getElementById('pdfPassword').value.trim();
-    const backendUrl = document.getElementById('backendUrlInput').value.trim();
-    if (!password) return alert("Vui lòng nhập mật khẩu!");
-    
-    localStorage.setItem('hellangel_backend_url', backendUrl);
-    const btn = document.getElementById('btnConfirmSecurity');
-    const oldText = btn.innerText;
-    btn.innerText = "⏳ Đang khóa..."; btn.disabled = true;
-
-    try {
-        const formData = new FormData();
-        formData.append('pdfFile', currentSingleFile, currentSingleFile.name);
-        formData.append('password', password);
-        formData.append('allowPrint', document.getElementById('chkPrint').checked);
-        formData.append('allowEdit', document.getElementById('chkEdit').checked);
-        formData.append('allowCopy', document.getElementById('chkCopy').checked);
-        formData.append('allowComment', document.getElementById('chkComment').checked);
-
-        const response = await fetch(backendUrl, { method: 'POST', body: formData });
-        if (!response.ok) throw new Error(`Phản hồi ${response.status}`);
-        
-        downloadBlob(new Uint8Array(await (await response.blob()).arrayBuffer()), `ThienThanDiaNguc_Secured_${Date.now()}.pdf`);
-        securityModal.style.display = 'none'; 
-    } catch (error) {
-        alert("Lỗi Backend: " + error.message);
-    } finally {
-        btn.innerText = oldText; btn.disabled = false;
-    }
-});
