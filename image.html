@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Xử Lý Ảnh Hàng Loạt ⚡ Thiên Thần Địa Ngục</title>
+    
+    <!-- Thư viện nén ZIP và Tải file -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+    
+    <style>
+        :root { 
+            --bg-color: #f8fafc; --card-bg: #ffffff; --text-main: #0f172a; --text-muted: #64748b; 
+            --accent-color: #facc15; --accent-hover: #eab308; --border-color: #e2e8f0; --btn-text: #000;
+            --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); --glow: 0 0 15px rgba(250, 204, 21, 0.5);
+        }
+        [data-theme="dark"] {
+            --bg-color: #0f172a; --card-bg: #1e293b; --text-main: #f8fafc; --text-muted: #94a3b8; 
+            --accent-color: #facc15; --border-color: #334155; --btn-text: #000;
+            --shadow: 0 10px 25px rgba(0,0,0,0.5); --glow: 0 0 20px rgba(250, 204, 21, 0.7);
+        }
+
+        body { font-family: 'Segoe UI', Tahoma, sans-serif; background: var(--bg-color); color: var(--text-main); margin: 0; padding: 2rem; display: flex; flex-direction: column; align-items: center; transition: 0.3s; }
+        
+        .header { width: 100%; max-width: 1200px; display: flex; align-items: center; justify-content: space-between; margin-bottom: 2rem; }
+        .app-logo { font-size: 2rem; font-weight: 900; margin: 0; display: flex; align-items: center; gap: 8px; text-transform: uppercase;}
+        .app-logo span { color: var(--accent-color); text-shadow: var(--glow); }
+        
+        .icon-btn { background: var(--card-bg); border: 2px solid var(--border-color); color: var(--text-main); padding: 8px 12px; border-radius: 8px; cursor: pointer; font-weight: bold; transition: 0.3s;}
+        .icon-btn:hover { border-color: var(--accent-color); box-shadow: var(--glow); }
+
+        .container { background: var(--card-bg); width: 100%; max-width: 1200px; border-radius: 12px; border-top: 4px solid var(--accent-color); box-shadow: var(--shadow); overflow: hidden; }
+
+        /* MÀN HÌNH UPLOAD */
+        #uploadScreen { padding: 5rem 2rem; text-align: center; }
+        .upload-area { border: 2px dashed var(--border-color); border-radius: 12px; padding: 4rem 2rem; cursor: pointer; transition: 0.3s; display: block; background: var(--bg-color); }
+        .upload-area:hover { border-color: var(--accent-color); box-shadow: var(--glow); }
+        .upload-area input { display: none; }
+
+        /* WORKSPACE LAYOUT (2 CỘT) */
+        #workspaceScreen { display: none; display: flex; height: 80vh; }
+        
+        /* CỘT TRÁI: BẢNG ĐIỀU KHIỂN */
+        .sidebar { width: 350px; background: var(--card-bg); border-right: 1px solid var(--border-color); padding: 1.5rem; overflow-y: auto; display: flex; flex-direction: column; gap: 1.5rem; }
+        .panel-group { border: 1px solid var(--border-color); padding: 15px; border-radius: 8px; background: var(--bg-color); }
+        .panel-title { font-weight: bold; color: var(--accent-color); margin-bottom: 15px; border-bottom: 1px solid var(--border-color); padding-bottom: 5px; }
+        
+        .input-row { display: flex; gap: 10px; margin-bottom: 10px; align-items: center; }
+        .input-row label { flex: 1; font-size: 0.9rem; }
+        .input-group { display: flex; flex: 2; gap: 5px; }
+        .input-group input, .input-group select { width: 100%; padding: 6px; border-radius: 4px; border: 1px solid var(--border-color); background: var(--card-bg); color: var(--text-main); outline: none; }
+        .input-group input:focus { border-color: var(--accent-color); }
+
+        .btn { background: var(--card-bg); color: var(--text-main); border: 1px solid var(--border-color); padding: 10px; border-radius: 6px; cursor: pointer; font-weight: bold; transition: 0.2s; width: 100%; text-align: center;}
+        .btn-primary { background: var(--accent-color); color: var(--btn-text); border: none; font-size: 1.1rem; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        .btn-primary:hover { transform: translateY(-2px); box-shadow: var(--glow); background: var(--accent-hover); }
+
+        /* CỘT PHẢI: LƯỚI ẢNH */
+        .main-content { flex: 1; display: flex; flex-direction: column; background: var(--bg-color); }
+        .toolbar { padding: 10px 20px; border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center; background: var(--card-bg); }
+        
+        #previewGrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 15px; padding: 20px; overflow-y: auto; flex: 1; }
+        .img-card { background: var(--card-bg); padding: 5px; border-radius: 6px; border: 1px solid var(--border-color); text-align: center; position: relative; }
+        .img-card img { width: 100%; height: 100px; object-fit: cover; border-radius: 4px; }
+        .img-name { font-size: 0.7rem; margin-top: 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .remove-btn { position: absolute; top: -5px; right: -5px; background: red; color: white; border: none; width: 20px; height: 20px; border-radius: 50%; cursor: pointer; font-size: 10px; }
+
+        /* PROGRESS BAR */
+        #progressContainer { display: none; padding: 20px; border-top: 1px solid var(--border-color); background: var(--card-bg); }
+        .progress-bar { width: 100%; height: 10px; background: var(--border-color); border-radius: 5px; overflow: hidden; margin-top: 5px; }
+        .progress-fill { height: 100%; background: var(--accent-color); width: 0%; transition: width 0.2s; box-shadow: var(--glow); }
+    </style>
+</head>
+<body data-theme="dark">
+
+    <div class="header">
+        <h1 class="app-logo">IMAGE <span>⚡</span> BATCH</h1>
+        <div>
+            <button class="icon-btn" onclick="window.location.href='index.html'">⬅ Về Home</button>
+            <button id="btnToggleTheme" class="icon-btn">🌞</button>
+        </div>
+    </div>
+
+    <div class="container">
+        <!-- UPLOAD -->
+        <div id="uploadScreen">
+            <label class="upload-area" id="dropZone">
+                <div style="font-size: 4rem; margin-bottom: 10px;">🖼️</div>
+                <h2>Kéo thả nhiều hình ảnh vào đây</h2>
+                <p style="color: var(--text-muted);">Hỗ trợ JPG, PNG, WEBP. Xử lý hàng trăm ảnh cực nhanh.</p>
+                <input type="file" id="fileInput" accept="image/*" multiple>
+            </label>
+        </div>
+
+        <!-- WORKSPACE -->
+        <div id="workspaceScreen" style="display: none;">
+            
+            <!-- CỘT TRÁI: BẢNG SETTING -->
+            <div class="sidebar">
+                
+                <!-- Resize -->
+                <div class="panel-group">
+                    <div class="panel-title">📐 Resize Kích Thước</div>
+                    <div class="input-row">
+                        <label>Chiều rộng:</label>
+                        <div class="input-group"><input type="number" id="resW" placeholder="Auto"> <span style="line-height:30px">px</span></div>
+                    </div>
+                    <div class="input-row">
+                        <label>Chiều cao:</label>
+                        <div class="input-group"><input type="number" id="resH" placeholder="Auto"> <span style="line-height:30px">px</span></div>
+                    </div>
+                </div>
+
+                <!-- Cắt viền (Crop Margins) -->
+                <div class="panel-group">
+                    <div class="panel-title">✂️ Cắt Viền (Xén)</div>
+                    <div class="input-row" style="margin-bottom: 10px;">
+                        <label>Đơn vị cắt:</label>
+                        <select id="cropUnit" style="width: 100%; padding: 5px; border-radius:4px; background:var(--bg-color); color:var(--text-main); border:1px solid var(--border-color);">
+                            <option value="px">Pixel (px)</option>
+                            <option value="percent">Phần trăm (%)</option>
+                        </select>
+                    </div>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                        <div><small>Trên</small><input type="number" id="crTop" value="0" style="width:100%; padding:5px; box-sizing:border-box;"></div>
+                        <div><small>Dưới</small><input type="number" id="crBottom" value="0" style="width:100%; padding:5px; box-sizing:border-box;"></div>
+                        <div><small>Trái</small><input type="number" id="crLeft" value="0" style="width:100%; padding:5px; box-sizing:border-box;"></div>
+                        <div><small>Phải</small><input type="number" id="crRight" value="0" style="width:100%; padding:5px; box-sizing:border-box;"></div>
+                    </div>
+                </div>
+
+                <!-- Bộ lọc & Lật -->
+                <div class="panel-group">
+                    <div class="panel-title">🎨 Bộ Lọc & Xoay Lật</div>
+                    <div class="input-row"><label>Độ sáng (%):</label><input type="range" id="flBright" min="0" max="200" value="100" style="flex:2"></div>
+                    <div class="input-row"><label>Độ tương phản (%):</label><input type="range" id="flContrast" min="0" max="200" value="100" style="flex:2"></div>
+                    <div class="input-row">
+                        <label><input type="checkbox" id="flGrayscale"> Đen trắng</label>
+                    </div>
+                    <div class="input-row" style="gap:10px;">
+                        <label><input type="checkbox" id="flipH"> ↔ Lật ngang</label>
+                        <label><input type="checkbox" id="flipV"> ↕ Lật dọc</label>
+                    </div>
+                </div>
+
+                <!-- Đóng dấu -->
+                <div class="panel-group">
+                    <div class="panel-title">©️ Đóng Dấu (Watermark)</div>
+                    <input type="text" id="wmText" placeholder="Nhập chữ ký..." style="width:100%; padding:8px; box-sizing:border-box; margin-bottom:10px; background:var(--bg-color); color:var(--text-main); border:1px solid var(--border-color); border-radius:4px;">
+                    <div class="input-row">
+                        <label>Góc:</label>
+                        <select id="wmPos" style="flex:2; padding:5px;">
+                            <option value="br">Góc Dưới Phải</option>
+                            <option value="bl">Góc Dưới Trái</option>
+                            <option value="center">Chính Giữa</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Xuất file -->
+                <div class="panel-group">
+                    <div class="panel-title">📦 Định Dạng Xuất</div>
+                    <div class="input-row">
+                        <select id="outFormat" style="flex:1; padding:8px;">
+                            <option value="jpeg">Giữ nguyên hoặc JPG</option>
+                            <option value="png">Chuyển sang PNG</option>
+                            <option value="webp">Chuyển sang WEBP (Nhẹ nhất)</option>
+                        </select>
+                    </div>
+                    <div class="input-row">
+                        <label>Tiền tố tên file:</label>
+                        <input type="text" id="outPrefix" placeholder="VD: HellAngel_" style="flex:2; padding:5px;">
+                    </div>
+                </div>
+
+                <button class="btn btn-primary" id="btnExecute">⚡ TẢI VỀ FILE ZIP</button>
+            </div>
+
+            <!-- CỘT PHẢI: LƯỚI HIỂN THỊ -->
+            <div class="main-content">
+                <div class="toolbar">
+                    <span id="fileCountText" style="font-weight: bold; color: var(--accent-color);">Đã tải lên 0 ảnh</span>
+                    <button class="btn" id="btnReset" style="width: auto;">Thêm file khác / Làm lại</button>
+                </div>
+                <div id="previewGrid"></div>
+                
+                <div id="progressContainer">
+                    <div style="display: flex; justify-content: space-between; font-size: 0.9rem;">
+                        <span id="progressText">Đang xử lý: 0/0</span>
+                        <span id="progressPercent">0%</span>
+                    </div>
+                    <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <script src="image.js"></script>
+</body>
+</html>
