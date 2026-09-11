@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Xử Lý Ảnh Hàng Loạt ⚡ Thiên Thần Địa Ngục</title>
     
-    <!-- Thư viện nén ZIP và Tải file -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
     
@@ -32,16 +31,13 @@
 
         .container { background: var(--card-bg); width: 100%; max-width: 1200px; border-radius: 12px; border-top: 4px solid var(--accent-color); box-shadow: var(--shadow); overflow: hidden; }
 
-        /* MÀN HÌNH UPLOAD */
         #uploadScreen { padding: 5rem 2rem; text-align: center; }
         .upload-area { border: 2px dashed var(--border-color); border-radius: 12px; padding: 4rem 2rem; cursor: pointer; transition: 0.3s; display: block; background: var(--bg-color); }
-        .upload-area:hover { border-color: var(--accent-color); box-shadow: var(--glow); }
+        .upload-area:hover { border-color: var(--accent-color); background: rgba(250, 204, 21, 0.05); box-shadow: var(--glow); }
         .upload-area input { display: none; }
 
-        /* WORKSPACE LAYOUT (2 CỘT) */
         #workspaceScreen { display: none; display: flex; height: 80vh; }
         
-        /* CỘT TRÁI: BẢNG ĐIỀU KHIỂN */
         .sidebar { width: 350px; background: var(--card-bg); border-right: 1px solid var(--border-color); padding: 1.5rem; overflow-y: auto; display: flex; flex-direction: column; gap: 1.5rem; }
         .panel-group { border: 1px solid var(--border-color); padding: 15px; border-radius: 8px; background: var(--bg-color); }
         .panel-title { font-weight: bold; color: var(--accent-color); margin-bottom: 15px; border-bottom: 1px solid var(--border-color); padding-bottom: 5px; }
@@ -56,20 +52,32 @@
         .btn-primary { background: var(--accent-color); color: var(--btn-text); border: none; font-size: 1.1rem; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
         .btn-primary:hover { transform: translateY(-2px); box-shadow: var(--glow); background: var(--accent-hover); }
 
-        /* CỘT PHẢI: LƯỚI ẢNH */
         .main-content { flex: 1; display: flex; flex-direction: column; background: var(--bg-color); }
         .toolbar { padding: 10px 20px; border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center; background: var(--card-bg); }
         
-        #previewGrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 15px; padding: 20px; overflow-y: auto; flex: 1; }
-        .img-card { background: var(--card-bg); padding: 5px; border-radius: 6px; border: 1px solid var(--border-color); text-align: center; position: relative; }
+        #previewGrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 15px; padding: 20px; overflow-y: auto; flex: 1; }
+        .img-card { background: var(--card-bg); padding: 5px; border-radius: 6px; border: 1px solid var(--border-color); text-align: center; position: relative; transition: 0.2s; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .img-card:hover { transform: translateY(-3px); box-shadow: var(--glow); border-color: var(--accent-color); }
         .img-card img { width: 100%; height: 100px; object-fit: cover; border-radius: 4px; }
-        .img-name { font-size: 0.7rem; margin-top: 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .remove-btn { position: absolute; top: -5px; right: -5px; background: red; color: white; border: none; width: 20px; height: 20px; border-radius: 50%; cursor: pointer; font-size: 10px; }
+        .img-name { font-size: 0.75rem; margin-top: 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .remove-btn { position: absolute; top: -5px; right: -5px; background: #ef4444; color: white; border: none; width: 22px; height: 22px; border-radius: 50%; cursor: pointer; font-size: 12px; font-weight: bold;}
+        
+        /* Nút Xem Trước cho từng ảnh */
+        .preview-btn { position: absolute; bottom: 35px; left: 50%; transform: translateX(-50%); background: var(--accent-color); color: var(--btn-text); border: none; padding: 5px 12px; border-radius: 4px; cursor: pointer; opacity: 0; transition: 0.2s; font-weight: bold; box-shadow: 0 2px 5px rgba(0,0,0,0.5); display: flex; align-items: center; gap: 5px;}
+        .img-card:hover .preview-btn { opacity: 1; }
 
-        /* PROGRESS BAR */
         #progressContainer { display: none; padding: 20px; border-top: 1px solid var(--border-color); background: var(--card-bg); }
         .progress-bar { width: 100%; height: 10px; background: var(--border-color); border-radius: 5px; overflow: hidden; margin-top: 5px; }
         .progress-fill { height: 100%; background: var(--accent-color); width: 0%; transition: width 0.2s; box-shadow: var(--glow); }
+
+        /* MODAL XEM TRƯỚC KẾT QUẢ (POPUP) */
+        #previewModal { display: none; position: fixed; z-index: 9999; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); justify-content: center; align-items: center; flex-direction: column; backdrop-filter: blur(5px); }
+        .modal-content { background: var(--card-bg); padding: 20px; border-radius: 12px; text-align: center; max-width: 90%; max-height: 90%; display: flex; flex-direction: column; border: 2px solid var(--accent-color); box-shadow: var(--shadow); }
+        .modal-img-container { flex: 1; overflow: hidden; display: flex; justify-content: center; align-items: center; background: var(--bg-color); border: 1px dashed var(--border-color); border-radius: 8px; padding: 10px; margin: 15px 0; }
+        #previewImageResult { max-width: 100%; max-height: 60vh; object-fit: contain; border-radius: 4px; box-shadow: 0 5px 15px rgba(0,0,0,0.5); }
+        #previewImageInfo { font-size: 0.95rem; color: var(--text-main); background: var(--bg-color); padding: 8px; border-radius: 6px; border: 1px solid var(--border-color); }
+        #closePreviewModal { position: absolute; top: 15px; right: 25px; color: var(--accent-color); font-size: 40px; cursor: pointer; z-index: 1000; font-weight: bold; transition: 0.2s;}
+        #closePreviewModal:hover { color: #fff; transform: scale(1.1); }
     </style>
 </head>
 <body data-theme="dark">
@@ -96,9 +104,7 @@
         <!-- WORKSPACE -->
         <div id="workspaceScreen" style="display: none;">
             
-            <!-- CỘT TRÁI: BẢNG SETTING -->
             <div class="sidebar">
-                
                 <!-- Resize -->
                 <div class="panel-group">
                     <div class="panel-title">📐 Resize Kích Thước</div>
@@ -112,7 +118,7 @@
                     </div>
                 </div>
 
-                <!-- Cắt viền (Crop Margins) -->
+                <!-- Crop -->
                 <div class="panel-group">
                     <div class="panel-title">✂️ Cắt Viền (Xén)</div>
                     <div class="input-row" style="margin-bottom: 10px;">
@@ -130,11 +136,11 @@
                     </div>
                 </div>
 
-                <!-- Bộ lọc & Lật -->
+                <!-- Filters -->
                 <div class="panel-group">
                     <div class="panel-title">🎨 Bộ Lọc & Xoay Lật</div>
                     <div class="input-row"><label>Độ sáng (%):</label><input type="range" id="flBright" min="0" max="200" value="100" style="flex:2"></div>
-                    <div class="input-row"><label>Độ tương phản (%):</label><input type="range" id="flContrast" min="0" max="200" value="100" style="flex:2"></div>
+                    <div class="input-row"><label>Tương phản (%):</label><input type="range" id="flContrast" min="0" max="200" value="100" style="flex:2"></div>
                     <div class="input-row">
                         <label><input type="checkbox" id="flGrayscale"> Đen trắng</label>
                     </div>
@@ -144,13 +150,13 @@
                     </div>
                 </div>
 
-                <!-- Đóng dấu -->
+                <!-- Watermark -->
                 <div class="panel-group">
-                    <div class="panel-title">©️ Đóng Dấu (Watermark)</div>
-                    <input type="text" id="wmText" placeholder="Nhập chữ ký..." style="width:100%; padding:8px; box-sizing:border-box; margin-bottom:10px; background:var(--bg-color); color:var(--text-main); border:1px solid var(--border-color); border-radius:4px;">
+                    <div class="panel-title">©️ Đóng Dấu (Chữ ký)</div>
+                    <input type="text" id="wmText" placeholder="Nhập chữ ký của bạn..." style="width:100%; padding:8px; box-sizing:border-box; margin-bottom:10px; background:var(--bg-color); color:var(--text-main); border:1px solid var(--border-color); border-radius:4px;">
                     <div class="input-row">
-                        <label>Góc:</label>
-                        <select id="wmPos" style="flex:2; padding:5px;">
+                        <label>Vị trí:</label>
+                        <select id="wmPos" style="flex:2; padding:5px; background:var(--bg-color); color:var(--text-main); border:1px solid var(--border-color);">
                             <option value="br">Góc Dưới Phải</option>
                             <option value="bl">Góc Dưới Trái</option>
                             <option value="center">Chính Giữa</option>
@@ -158,18 +164,18 @@
                     </div>
                 </div>
 
-                <!-- Xuất file -->
+                <!-- Output -->
                 <div class="panel-group">
                     <div class="panel-title">📦 Định Dạng Xuất</div>
                     <div class="input-row">
-                        <select id="outFormat" style="flex:1; padding:8px;">
+                        <select id="outFormat" style="flex:1; padding:8px; background:var(--bg-color); color:var(--text-main); border:1px solid var(--border-color);">
                             <option value="jpeg">Giữ nguyên hoặc JPG</option>
                             <option value="png">Chuyển sang PNG</option>
                             <option value="webp">Chuyển sang WEBP (Nhẹ nhất)</option>
                         </select>
                     </div>
                     <div class="input-row">
-                        <label>Tiền tố tên file:</label>
+                        <label>Tiền tố file:</label>
                         <input type="text" id="outPrefix" placeholder="VD: HellAngel_" style="flex:2; padding:5px;">
                     </div>
                 </div>
@@ -177,16 +183,16 @@
                 <button class="btn btn-primary" id="btnExecute">⚡ TẢI VỀ FILE ZIP</button>
             </div>
 
-            <!-- CỘT PHẢI: LƯỚI HIỂN THỊ -->
+            <!-- CỘT PHẢI -->
             <div class="main-content">
                 <div class="toolbar">
                     <span id="fileCountText" style="font-weight: bold; color: var(--accent-color);">Đã tải lên 0 ảnh</span>
-                    <button class="btn" id="btnReset" style="width: auto;">Thêm file khác / Làm lại</button>
+                    <button class="btn" id="btnReset" style="width: auto;">+ Thêm ảnh / Làm lại</button>
                 </div>
                 <div id="previewGrid"></div>
                 
                 <div id="progressContainer">
-                    <div style="display: flex; justify-content: space-between; font-size: 0.9rem;">
+                    <div style="display: flex; justify-content: space-between; font-size: 0.9rem; font-weight: bold;">
                         <span id="progressText">Đang xử lý: 0/0</span>
                         <span id="progressPercent">0%</span>
                     </div>
@@ -194,6 +200,18 @@
                 </div>
             </div>
 
+        </div>
+    </div>
+
+    <!-- BẢNG MODAL XEM TRƯỚC (LIVE PREVIEW) -->
+    <div id="previewModal">
+        <span id="closePreviewModal" title="Đóng">&times;</span>
+        <div class="modal-content">
+            <h2 style="margin-top: 0; color: var(--accent-color);">👁️ Xem Trước Kết Quả</h2>
+            <div class="modal-img-container">
+                <img id="previewImageResult">
+            </div>
+            <div id="previewImageInfo">Đang áp dụng bộ lọc và tính toán... ⚡</div>
         </div>
     </div>
 
